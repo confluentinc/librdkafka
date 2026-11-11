@@ -324,17 +324,13 @@ static void verify_e2e_stats(const std::string &prod_stats,
     exp_tot_rxmsg_bytes += rxbytes;
 
     Test::Say(tostr() << "Producer partition: " << (*pp)["partition"].GetInt()
-                      << ": "
-                      << "txmsgs: " << txmsgs << " vs "
-                      << exp_parts[part].msgcnt << ", "
-                      << "txbytes: " << txbytes << " vs "
-                      << exp_parts[part].totsize << "\n");
+                      << ": " << "txmsgs: " << txmsgs << " vs "
+                      << exp_parts[part].msgcnt << ", " << "txbytes: "
+                      << txbytes << " vs " << exp_parts[part].totsize << "\n");
     Test::Say(tostr() << "Consumer partition: " << (*cp)["partition"].GetInt()
-                      << ": "
-                      << "rxmsgs: " << rxmsgs << " vs "
-                      << exp_parts[part].msgcnt << ", "
-                      << "rxbytes: " << rxbytes << " vs "
-                      << exp_parts[part].totsize << "\n");
+                      << ": " << "rxmsgs: " << rxmsgs << " vs "
+                      << exp_parts[part].msgcnt << ", " << "rxbytes: "
+                      << rxbytes << " vs " << exp_parts[part].totsize << "\n");
   }
 
   /* Check top-level total stats */
@@ -349,16 +345,12 @@ static void verify_e2e_stats(const std::string &prod_stats,
   int64_t tot_rxmsgs      = c["rxmsgs"].GetInt();
   int64_t tot_rxmsg_bytes = c["rxmsg_bytes"].GetInt();
 
-  Test::Say(tostr() << "Producer total: "
-                    << "txmsgs: " << tot_txmsgs << " vs " << exp_tot_txmsgs
-                    << ", "
-                    << "txbytes: " << tot_txmsg_bytes << " vs "
-                    << exp_tot_txmsg_bytes << "\n");
-  Test::Say(tostr() << "Consumer total: "
-                    << "rxmsgs: " << tot_rxmsgs << " vs " << exp_tot_rxmsgs
-                    << ", "
-                    << "rxbytes: " << tot_rxmsg_bytes << " vs "
-                    << exp_tot_rxmsg_bytes << "\n");
+  Test::Say(tostr() << "Producer total: " << "txmsgs: " << tot_txmsgs << " vs "
+                    << exp_tot_txmsgs << ", " << "txbytes: " << tot_txmsg_bytes
+                    << " vs " << exp_tot_txmsg_bytes << "\n");
+  Test::Say(tostr() << "Consumer total: " << "rxmsgs: " << tot_rxmsgs << " vs "
+                    << exp_tot_rxmsgs << ", " << "rxbytes: " << tot_rxmsg_bytes
+                    << " vs " << exp_tot_rxmsg_bytes << "\n");
 }
 
 /**

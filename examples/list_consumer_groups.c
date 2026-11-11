@@ -73,7 +73,8 @@ static void usage(const char *reason, ...) {
         fprintf(stderr,
                 "List groups usage examples\n"
                 "\n"
-                "Usage: %s <options> <state1> <state2> ...\n"
+                "Usage: %s <options> <state_cnt> [<state1> <state2> ...] "
+                "<type_cnt> [<type1> <type2> ...]\n"
                 "\n"
                 "Options:\n"
                 "   -b <brokers>    Bootstrap server list to connect to.\n"
@@ -145,12 +146,15 @@ static int print_groups_info(const rd_kafka_ListConsumerGroups_result_t *list) {
                 int is_simple_consumer_group =
                     rd_kafka_ConsumerGroupListing_is_simple_consumer_group(
                         group);
+                rd_kafka_consumer_group_type_t type =
+                    rd_kafka_ConsumerGroupListing_type(group);
 
                 printf("Group \"%s\", is simple %" PRId32
                        ", "
-                       "state %s",
+                       "state %s, type %s",
                        group_id, is_simple_consumer_group,
-                       rd_kafka_consumer_group_state_name(state));
+                       rd_kafka_consumer_group_state_name(state),
+                       rd_kafka_consumer_group_type_name(type));
                 printf("\n");
         }
         for (i = 0; i < result_error_cnt; i++) {
@@ -184,24 +188,46 @@ int64_t parse_int(const char *what, const char *str) {
 static void
 cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
         rd_kafka_t *rk;
-        const char **states_str = NULL;
         char errstr[512];
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *event = NULL;
         rd_kafka_error_t *error = NULL;
         int i;
-        int retval     = 0;
-        int states_cnt = 0;
+        int retval         = 0;
+        int states_cnt     = 0;
+        int types_cnt      = 0;
+        const int min_argc = 2;
+
         rd_kafka_consumer_group_state_t *states;
+        rd_kafka_consumer_group_type_t *types;
 
+        /*
+         * Argument validation
+         */
+        if (argc < min_argc)
+                usage("Expected at least %d arguments", min_argc);
+        else {
+                states_cnt = parse_int("state count", argv[0]);
+                if (argc < states_cnt + 2) {
+                        usage("Expected %d state code(s) after states count",
+                              states_cnt);
+                }
 
-        if (argc >= 1) {
-                states_str = (const char **)&argv[0];
-                states_cnt = argc;
+                types_cnt = parse_int("type count", argv[1 + states_cnt]);
+                if (argc < 1 + states_cnt + 1 + types_cnt) {
+                        usage("Expected %d type(s) after type count",
+                              types_cnt);
+                }
         }
+
         states = calloc(states_cnt, sizeof(rd_kafka_consumer_group_state_t));
         for (i = 0; i < states_cnt; i++) {
-                states[i] = parse_int("state code", states_str[i]);
+                states[i] = parse_int("state code", argv[i + 1]);
+        }
+
+        types = calloc(types_cnt, sizeof(rd_kafka_consumer_group_type_t));
+        for (i = 0; i < types_cnt; i++) {
+                types[i] = parse_int("type code", argv[i + states_cnt + 2]);
         }
 
         /*
@@ -235,10 +261,17 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
                  options, states, states_cnt))) {
                 fprintf(stderr, "%% Failed to set states: %s\n",
                         rd_kafka_error_string(error));
-                rd_kafka_error_destroy(error);
                 goto exit;
         }
         free(states);
+        if ((error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                 options, types, types_cnt))) {
+                fprintf(stderr, "%% Failed to set types: %s\n",
+                        rd_kafka_error_string(error));
+                goto exit;
+        }
+        free(types);
+
 
         rd_kafka_ListConsumerGroups(rk, options, queue);
         rd_kafka_AdminOptions_destroy(options);
@@ -273,6 +306,8 @@ cmd_list_consumer_groups(rd_kafka_conf_t *conf, int argc, char **argv) {
 
 
 exit:
+        if (error)
+                rd_kafka_error_destroy(error);
         if (event)
                 rd_kafka_event_destroy(event);
         rd_kafka_queue_destroy(queue);

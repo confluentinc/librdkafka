@@ -49,20 +49,35 @@ typedef struct rd_tmpabuf_s {
         size_t of;
         char *buf;
         int failed;
-        int assert_on_fail;
+        rd_bool_t assert_on_fail;
 } rd_tmpabuf_t;
 
 /**
- * @brief Allocate new tmpabuf with \p size bytes pre-allocated.
+ * @brief Initialize new tmpabuf of non-final \p size bytes.
  */
 static RD_UNUSED void
-rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, int assert_on_fail) {
-        tab->buf            = rd_malloc(size);
-        tab->size           = size;
+rd_tmpabuf_new(rd_tmpabuf_t *tab, size_t size, rd_bool_t assert_on_fail) {
+        tab->buf            = NULL;
+        tab->size           = RD_ROUNDUP(size, 8);
         tab->of             = 0;
         tab->failed         = 0;
         tab->assert_on_fail = assert_on_fail;
 }
+
+/**
+ * @brief Add a new allocation of \p _size bytes,
+ *        rounded up to maximum word size,
+ *        for \p _times times.
+ */
+#define rd_tmpabuf_add_alloc_times(_tab, _size, _times)                        \
+        (_tab)->size += RD_ROUNDUP(_size, 8) * _times
+
+#define rd_tmpabuf_add_alloc(_tab, _size)                                      \
+        rd_tmpabuf_add_alloc_times(_tab, _size, 1)
+/**
+ * @brief Finalize tmpabuf pre-allocating tab->size bytes.
+ */
+#define rd_tmpabuf_finalize(_tab) (_tab)->buf = rd_malloc((_tab)->size)
 
 /**
  * @brief Free memory allocated by tmpabuf
@@ -360,13 +375,16 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 
         union {
                 struct {
-                        rd_list_t *topics;     /* Requested topics (char *) */
-                        char *reason;          /* Textual reason */
-                        rd_kafka_op_t *rko;    /* Originating rko with replyq
-                                                * (if any) */
+                        rd_list_t *topics; /* Requested topics (char *) */
+                        rd_list_t *
+                            topic_ids; /* Requested topic ids rd_kafka_Uuid_t */
+                        char *reason;  /* Textual reason */
                         rd_bool_t all_topics;  /**< Full/All topics requested */
                         rd_bool_t cgrp_update; /**< Update cgrp with topic
                                                 *   status from response. */
+                        int32_t cgrp_subscription_version;
+                        /**< Consumer group subscription version, to
+                         *   check before updating cgrp state. */
                         rd_bool_t force_racks; /**< Force the returned metadata
                                                 *   to contain partition to
                                                 *   rack mapping. */
@@ -507,7 +525,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
 #define rd_kafka_buf_skip_to(rkbuf, pos)                                       \
         do {                                                                   \
                 size_t __len1 =                                                \
-                    (size_t)(pos)-rd_slice_offset(&(rkbuf)->rkbuf_reader);     \
+                    (size_t)(pos) - rd_slice_offset(&(rkbuf)->rkbuf_reader);   \
                 if (__len1 &&                                                  \
                     !rd_slice_read(&(rkbuf)->rkbuf_reader, NULL, __len1))      \
                         rd_kafka_buf_check_len(rkbuf, __len1);                 \
@@ -702,15 +720,29 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 /**
- * Skip a string.
+ * Skip a string without flexver.
  */
-#define rd_kafka_buf_skip_str(rkbuf)                                           \
+#define rd_kafka_buf_skip_str_no_flexver(rkbuf)                                \
         do {                                                                   \
                 int16_t _slen;                                                 \
                 rd_kafka_buf_read_i16(rkbuf, &_slen);                          \
                 rd_kafka_buf_skip(rkbuf, RD_KAFKAP_STR_LEN0(_slen));           \
         } while (0)
 
+/**
+ * Skip a string (generic).
+ */
+#define rd_kafka_buf_skip_str(rkbuf)                                           \
+        do {                                                                   \
+                if ((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER) {            \
+                        uint64_t _uva;                                         \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_uva);               \
+                        rd_kafka_buf_skip(                                     \
+                            rkbuf, RD_KAFKAP_STR_LEN0(((int64_t)_uva) - 1));   \
+                } else {                                                       \
+                        rd_kafka_buf_skip_str_no_flexver(rkbuf);               \
+                }                                                              \
+        } while (0)
 /**
  * Read Kafka COMPACT_BYTES representation (VARINT+N) or
  * standard BYTES representation(4+N).
@@ -726,6 +758,27 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                         rd_kafka_buf_read_uvarint(rkbuf, &_uva);               \
                         _klen = ((int32_t)_uva) - 1;                           \
                 }                                                              \
+                (kbytes)->len = _klen;                                         \
+                if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                         \
+                        (kbytes)->data = NULL;                                 \
+                        (kbytes)->len  = 0;                                    \
+                } else if (RD_KAFKAP_BYTES_LEN(kbytes) == 0)                   \
+                        (kbytes)->data = "";                                   \
+                else if (!((kbytes)->data = rd_slice_ensure_contig(            \
+                               &(rkbuf)->rkbuf_reader, _klen)))                \
+                        rd_kafka_buf_check_len(rkbuf, _klen);                  \
+        } while (0)
+
+/**
+ * Read standard BYTES representation (4+N), regardless of the buffer's
+ * flexible-version flag: for structures that always use the non-compact
+ * encoding, such as legacy v0..v1 MessageSets in FetchResponses >= v12.
+ * The 'kbytes' will be updated to point to rkbuf data.
+ */
+#define rd_kafka_buf_read_kbytes_fixed(rkbuf, kbytes)                          \
+        do {                                                                   \
+                int32_t _klen;                                                 \
+                rd_kafka_buf_read_i32a(rkbuf, _klen);                          \
                 (kbytes)->len = _klen;                                         \
                 if (RD_KAFKAP_BYTES_IS_NULL(kbytes)) {                         \
                         (kbytes)->data = NULL;                                 \
@@ -806,11 +859,56 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         } while (0)
 
 /**
- * @brief Write tags at the current position in the buffer.
- * @remark Currently always writes empty tags.
- * @remark Change to ..write_uvarint() when actual tags are supported.
+ * @brief Read KIP-482 Tags at current position in the buffer using
+ *        the `read_tag` function receiving the `opaque' pointer.
  */
-#define rd_kafka_buf_write_tags(rkbuf)                                         \
+#define rd_kafka_buf_read_tags(rkbuf, read_tag, ...)                           \
+        do {                                                                   \
+                uint64_t _tagcnt;                                              \
+                if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
+                        break;                                                 \
+                rd_kafka_buf_read_uvarint(rkbuf, &_tagcnt);                    \
+                while (_tagcnt-- > 0) {                                        \
+                        uint64_t _tagtype, _taglen;                            \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_tagtype);           \
+                        rd_kafka_buf_read_uvarint(rkbuf, &_taglen);            \
+                        int _read_tag_resp =                                   \
+                            read_tag(rkbuf, _tagtype, _taglen, __VA_ARGS__);   \
+                        if (_read_tag_resp == -1)                              \
+                                goto err_parse;                                \
+                        if (!_read_tag_resp && _taglen > 0)                    \
+                                rd_kafka_buf_skip(rkbuf, (size_t)(_taglen));   \
+                }                                                              \
+        } while (0)
+
+/**
+ * @brief Write \p tagcnt tags at the current position in the buffer.
+ * Calling \p write_tag to write each one with \p rkbuf , tagtype
+ * argument and the remaining arguments.
+ */
+#define rd_kafka_buf_write_tags(rkbuf, write_tag, tags, tagcnt, ...)           \
+        do {                                                                   \
+                uint64_t i;                                                    \
+                if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
+                        break;                                                 \
+                rd_kafka_buf_write_uvarint(rkbuf, tagcnt);                     \
+                for (i = 0; i < tagcnt; i++) {                                 \
+                        size_t of_taglen, prev_buf_len;                        \
+                        rd_kafka_buf_write_uvarint(rkbuf, tags[i]);            \
+                        of_taglen    = rd_kafka_buf_write_arraycnt_pos(rkbuf); \
+                        prev_buf_len = (rkbuf)->rkbuf_buf.rbuf_len;            \
+                        write_tag(rkbuf, tags[i], __VA_ARGS__);                \
+                        rd_kafka_buf_finalize_arraycnt(                        \
+                            rkbuf, of_taglen,                                  \
+                            (rkbuf)->rkbuf_buf.rbuf_len - prev_buf_len - 1);   \
+                }                                                              \
+        } while (0)
+
+
+/**
+ * @brief Write empty tags at the current position in the buffer.
+ */
+#define rd_kafka_buf_write_tags_empty(rkbuf)                                   \
         do {                                                                   \
                 if (!((rkbuf)->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER))           \
                         break;                                                 \
@@ -933,6 +1031,7 @@ rd_kafka_buf_t *rd_kafka_buf_new_request0(rd_kafka_broker_t *rkb,
 #define rd_kafka_buf_new_flexver_request(rkb, ApiKey, segcnt, size,            \
                                          is_flexver)                           \
         rd_kafka_buf_new_request0(rkb, ApiKey, segcnt, size, is_flexver)
+void rd_kafka_buf_upgrade_flexver_request(rd_kafka_buf_t *rkbuf);
 
 rd_kafka_buf_t *
 rd_kafka_buf_new_shadow(const void *ptr, size_t size, void (*free_cb)(void *));
@@ -1439,7 +1538,7 @@ void rd_kafka_buf_set_maker(rd_kafka_buf_t *rkbuf,
         } while (0)
 
 static RD_UNUSED void rd_kafka_buf_write_uuid(rd_kafka_buf_t *rkbuf,
-                                              rd_kafka_uuid_t *uuid) {
+                                              rd_kafka_Uuid_t *uuid) {
         rd_kafka_buf_write_i64(rkbuf, uuid->most_significant_bits);
         rd_kafka_buf_write_i64(rkbuf, uuid->least_significant_bits);
 }

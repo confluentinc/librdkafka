@@ -34,7 +34,7 @@ mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-c
 
 mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Enable refcnt debugging" "n"
 
-mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.3)" "y"
+mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.4)" "y"
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for --enable-lz4-ext" "y"
 
 mkl_toggle_option "Feature" ENABLE_REGEX_EXT "--enable-regex-ext" "Enable external (libc) regex (else use builtin)" "y"
@@ -214,6 +214,16 @@ void foo (void) {
 void foo (void) {
    unsigned int seed = 0xbeaf;
    (void)rand_r(&seed);
+}"
+
+    # Check if getentropy() is available
+    mkl_compile_check "getentropy" "HAVE_GETENTROPY" disable CC "" \
+"#define _DEFAULT_SOURCE
+#include <unistd.h>
+#include <sys/random.h>
+int foo (void) {
+   char seed[16];
+   return getentropy((void *)seed, sizeof(seed));
 }"
 
     # Check if strndup() is available (isn't on Solaris 10)

@@ -230,6 +230,7 @@ static void offset_reset_errors(void) {
         for (i = 0; i < (int)RD_ARRAYSIZE(test); i++) {
                 rd_kafka_event_t *ev;
                 rd_bool_t broker_down = rd_false;
+                rd_ts_t abs_timeout, now;
 
                 /* Make sure consumer is connected */
                 test_wait_topic_exists(c, topic, 5000);
@@ -259,13 +260,32 @@ static void offset_reset_errors(void) {
                 test_consumer_assign_partition("ASSIGN", c, topic, partition,
                                                test[i].start_offset);
 
+                /* 5 seconds timeout */
+                abs_timeout = test_clock() + 5 * 1000000;
                 while (1) {
+                        rd_bool_t not_auto_offset_reset_error;
                         /* Poll until we see an AUTO_OFFSET_RESET error,
                          * timeout, or a message, depending on what we're
                          * looking for. */
-                        ev = rd_kafka_queue_poll(queue, 5000);
+                        ev  = rd_kafka_queue_poll(queue, 5000);
+                        now = test_clock();
+                        not_auto_offset_reset_error =
+                            ev &&
+                            rd_kafka_event_type(ev) == RD_KAFKA_EVENT_ERROR &&
+                            rd_kafka_event_error(ev) !=
+                                RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET;
 
-                        if (!ev) {
+                        if (!ev || (not_auto_offset_reset_error &&
+                                    now > abs_timeout)) {
+                                if (ev) {
+                                        TEST_SAY(
+                                            "#%d: Ignoring %s event: %s\n", i,
+                                            rd_kafka_event_name(ev),
+                                            rd_kafka_event_error_string(ev));
+                                        rd_kafka_event_destroy(ev);
+                                        ev = NULL;
+                                }
+
                                 TEST_ASSERT(broker_down,
                                             "#%d: poll timeout, but broker "
                                             "was not down",
@@ -278,12 +298,13 @@ static void offset_reset_errors(void) {
                                                                     broker_id);
 
                                 broker_down = rd_false;
+                                /* 5 seconds timeout */
+                                abs_timeout = test_clock() + 5 * 1000000;
 
                         } else if (rd_kafka_event_type(ev) ==
                                    RD_KAFKA_EVENT_ERROR) {
 
-                                if (rd_kafka_event_error(ev) !=
-                                    RD_KAFKA_RESP_ERR__AUTO_OFFSET_RESET) {
+                                if (not_auto_offset_reset_error) {
                                         TEST_SAY(
                                             "#%d: Ignoring %s event: %s\n", i,
                                             rd_kafka_event_name(ev),

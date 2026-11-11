@@ -138,11 +138,10 @@ int64_t parse_int(const char *what, const char *str) {
 }
 
 rd_kafka_ScramMechanism_t parse_mechanism(const char *arg) {
-        return !strcmp(arg, "SCRAM-SHA-256")
-                   ? RD_KAFKA_SCRAM_MECHANISM_SHA_256
-                   : !strcmp(arg, "SCRAM-SHA-512")
-                         ? RD_KAFKA_SCRAM_MECHANISM_SHA_512
-                         : RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
+        return !strcmp(arg, "SCRAM-SHA-256") ? RD_KAFKA_SCRAM_MECHANISM_SHA_256
+               : !strcmp(arg, "SCRAM-SHA-512")
+                   ? RD_KAFKA_SCRAM_MECHANISM_SHA_512
+                   : RD_KAFKA_SCRAM_MECHANISM_UNKNOWN;
 }
 
 static void print_descriptions(

@@ -159,7 +159,8 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, owned_partitions,
                     rd_false /*don't skip invalid offsets*/,
-                    rd_false /*any offset*/, fields);
+                    rd_false /*any offset*/, rd_false /*don't use topic id*/,
+                    rd_true /*use topic name*/, fields);
         }
 
         /* Following data is ignored by consumer version < 2 */
@@ -239,6 +240,13 @@ static void rd_kafka_assignor_topic_destroy(rd_kafka_assignor_topic_t *at) {
         rd_free(at);
 }
 
+/**
+ * @brief Destroy-variant suitable for rd_list free_cb use.
+ */
+static void rd_kafka_assignor_topic_free(void *ptr) {
+        rd_kafka_assignor_topic_destroy((rd_kafka_assignor_topic_t *)ptr);
+}
+
 int rd_kafka_assignor_topic_cmp(const void *_a, const void *_b) {
         const rd_kafka_assignor_topic_t *a =
             *(const rd_kafka_assignor_topic_t *const *)_a;
@@ -266,7 +274,7 @@ rd_kafka_member_subscriptions_map(rd_kafka_cgrp_t *rkcg,
             rd_kafka_metadata_get_internal(metadata);
 
         rd_list_init(eligible_topics, RD_MIN(metadata->topic_cnt, 10),
-                     (void *)rd_kafka_assignor_topic_destroy);
+                     rd_kafka_assignor_topic_free);
 
         /* For each topic in the cluster, scan through the member list
          * to find matching subscriptions. */
@@ -456,6 +464,13 @@ static void rd_kafka_assignor_destroy(rd_kafka_assignor_t *rkas) {
         rd_free(rkas);
 }
 
+/**
+ * @brief Destroy-variant suitable for rd_list free_cb use.
+ */
+static void rd_kafka_assignor_free(void *ptr) {
+        rd_kafka_assignor_destroy((rd_kafka_assignor_t *)ptr);
+}
+
 
 /**
  * @brief Check that the rebalance protocol of all enabled assignors is
@@ -579,7 +594,7 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         int idx = 0;
 
         rd_list_init(&rk->rk_conf.partition_assignors, 3,
-                     (void *)rd_kafka_assignor_destroy);
+                     rd_kafka_assignor_free);
 
         /* Initialize builtin assignors (ignore errors) */
         rd_kafka_range_assignor_init(rk);
@@ -1278,7 +1293,7 @@ int verifyValidityAndBalance0(const char *func,
                                  * it means the assignment strategy failed to
                                  * properly balance the partitions. */
                                 if (!balanced &&
-                                    rd_kafka_topic_partition_list_find_topic(
+                                    rd_kafka_topic_partition_list_find_topic_by_name(
                                         otherPartitions, partition->topic)) {
                                         RD_UT_WARN(
                                             "Some %s partition(s) can be "

@@ -94,6 +94,13 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
+/**
+ * TODO KIP-932: Remove the check of RD_KAFKA_CONSUMER. Only
+ * checking for is_share_consumer should be sufficient.
+ */
+#define RD_KAFKA_IS_SHARE_CONSUMER(rk)                                         \
+        ((rk)->rk_type == RD_KAFKA_CONSUMER &&                                 \
+         (rk)->rk_conf.share.is_share_consumer)
 
 /**
  * @struct Represents a fetch position:
@@ -127,12 +134,12 @@ typedef struct rd_kafka_fetch_pos_s {
 /**
  * Protocol level sanity
  */
-#define RD_KAFKAP_BROKERS_MAX    10000
-#define RD_KAFKAP_TOPICS_MAX     1000000
-#define RD_KAFKAP_PARTITIONS_MAX 100000
-#define RD_KAFKAP_GROUPS_MAX     100000
-#define RD_KAFKAP_CONFIGS_MAX    10000
-
+#define RD_KAFKAP_BROKERS_MAX              10000
+#define RD_KAFKAP_TOPICS_MAX               1000000
+#define RD_KAFKAP_PARTITIONS_MAX           100000
+#define RD_KAFKAP_GROUPS_MAX               100000
+#define RD_KAFKAP_CONFIGS_MAX              10000
+#define RD_KAFKAP_ABORTED_TRANSACTIONS_MAX 1000000
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
@@ -234,7 +241,50 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
         return names[state];
 }
 
+/**
+ * @enum Telemetry States
+ */
+typedef enum {
+        /** Initial state, awaiting telemetry broker to be assigned */
+        RD_KAFKA_TELEMETRY_AWAIT_BROKER,
+        /** Telemetry broker assigned and GetSubscriptions scheduled */
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
+        /** GetSubscriptions request sent to the assigned broker */
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
+        /** PushTelemetry scheduled to send */
+        RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
+        /** PushTelemetry sent to the assigned broker */
+        RD_KAFKA_TELEMETRY_PUSH_SENT,
+        /** Client is being terminated and last PushTelemetry is scheduled to
+         *  send */
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED,
+        /** Client is being terminated and last PushTelemetry is sent */
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT,
+        /** Telemetry is terminated */
+        RD_KAFKA_TELEMETRY_TERMINATED,
+} rd_kafka_telemetry_state_t;
 
+
+static RD_UNUSED const char *
+rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
+        static const char *names[] = {"AwaitBroker",
+                                      "GetSubscriptionsScheduled",
+                                      "GetSubscriptionsSent",
+                                      "PushScheduled",
+                                      "PushSent",
+                                      "TerminatingPushScheduled",
+                                      "TerminatingPushSent",
+                                      "Terminated"};
+        return names[state];
+}
+
+static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
+        static const char *types[] = {
+            [RD_KAFKA_PRODUCER] = "producer",
+            [RD_KAFKA_CONSUMER] = "consumer",
+        };
+        return types[type];
+}
 
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
@@ -247,17 +297,32 @@ struct rd_kafka_s {
         TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t rk_broker_by_id; /* Fast id lookups. */
         rd_atomic32_t rk_broker_cnt;
-        /**< Number of brokers in state >= UP */
-        rd_atomic32_t rk_broker_up_cnt;
-        /**< Number of logical brokers in state >= UP, this is a sub-set
-         *   of rk_broker_up_cnt. */
-        rd_atomic32_t rk_logical_broker_up_cnt;
-        /**< Number of brokers that are down, only includes brokers
-         *   that have had at least one connection attempt. */
-        rd_atomic32_t rk_broker_down_cnt;
-        /**< Logical brokers currently without an address.
+        /**  Logical brokers count.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
-        rd_atomic32_t rk_broker_addrless_cnt;
+        rd_atomic32_t rk_logical_broker_cnt;
+        /**  Number of configured or learned brokers in state >= UP */
+        rd_atomic32_t rk_broker_up_cnt;
+        /**  Number of brokers that are down, only includes brokers
+         *   that have had at least one connection attempt
+         *   and are configured or learned. */
+        rd_atomic32_t rk_broker_down_cnt;
+        /**  Set to 1 when there's a re-bootstrap in progress.
+         *   Set to 0 when the re-bootstrap is done.
+         *   Accessed from the main thread and the broker threads. */
+        rd_atomic32_t rk_rebootstrap_in_progress;
+        /** Monotonic timestamp (microseconds) of the last time all brokers were
+         * reported as down. */
+        rd_atomic64_t rk_last_all_brokers_down_reported_ts;
+
+        /**< Additional bootstrap servers list.
+         *   contains all brokers added through rd_kafka_brokers_add().
+         *   Doesn't contain the initially configured bootstrap brokers. */
+        rd_list_t additional_brokerlists;
+
+        /** Decommissioned threads to await */
+        rd_list_t wait_decommissioned_thrds;
+        /** Decommissioned brokers to await */
+        rd_list_t wait_decommissioned_brokers;
 
         mtx_t rk_internal_rkb_lock;
         rd_kafka_broker_t *rk_internal_rkb;
@@ -275,6 +340,78 @@ struct rd_kafka_s {
         int rk_topic_cnt;
 
         struct rd_kafka_cgrp_s *rk_cgrp;
+
+        rd_kafka_share_t
+            *rk_rkshare; /**< Share consumer handle (if share
+                          *   consumer), NULL otherwise.
+                          *   Set when rd_kafka_share_consumer_new()
+                          *   is called, used to access inflight
+                          *   acks for building ack batches. */
+
+        /** Share consumer state. Only used when this rd_kafka_t handle
+         *  is a share consumer (rk_rkshare != NULL). */
+        /**
+         * TODO KIP-932: Change to rk_share when interface is finalized.
+         */
+        struct {
+                /** Runtime acknowledgement callback set via
+                 *  rd_kafka_share_set_acknowledgement_commit_cb().
+                 *  @locality APP THREAD ONLY (set in
+                 * set_share_acknowledgement_commit_cb).
+                 */
+                void (*share_acknowledgement_commit_cb)(
+                    rd_kafka_share_t *rkshare,
+                    rd_kafka_share_partition_offsets_list_t *partitions,
+                    rd_kafka_resp_err_t err,
+                    void *opaque);
+
+                /** Application opaque for acknowledgement callback.
+                 *  @locality APP THREAD ONLY. */
+                void *acknowledgement_commit_cb_opaque;
+
+                /** Reentrancy protection flag - set to true when inside
+                 *  callback.
+                 *  @locality APP THREAD ONLY. */
+                rd_bool_t in_callback;
+
+                /** Registration flag - whether callback is currently
+                 *  registered.
+                 *  Written via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op
+                 *  handler. Used by main thread to decide whether to
+                 *  enqueue callback ops.
+                 *  @locality MAIN THREAD ONLY. */
+                rd_bool_t acknowledgement_commit_cb_registered;
+
+                /** Single-thread access gate with re-entrant ownership.
+                 *
+                 *  Every public share consumer API calls
+                 *  rd_kafka_share_acquire() on entry and
+                 *  rd_kafka_share_release() before returning.
+                 *  The owning thread is recorded in
+                 *  @c current_owner_thread; concurrent entry from a
+                 *  different thread is rejected with
+                 *  RD_KAFKA_RESP_ERR__CONFLICT. The owning thread may
+                 *  re-enter (e.g. nested share calls), with @c ref_count
+                 *  tracking the nesting level — ownership is released
+                 *  only when @c ref_count returns to 0.
+                 *
+                 *  @c current_owner_thread holds a real per-thread
+                 *  identifier from thrd_current_id()
+                 *  (GetCurrentThreadId() on Windows, pthread_self()
+                 *  elsewhere); the unowned sentinel is
+                 *  RD_KAFKA_SHARE_NO_CURRENT_THREAD (-1) — a value no real
+                 *  thread id can take on any supported platform. 0 is
+                 *  deliberately *not* the sentinel so a missing init
+                 *  doesn't silently look "unowned" (a zero-initialised
+                 *  struct will fail acquire with __CONFLICT instead of
+                 *  letting two threads both pass through). The acquire
+                 *  path uses rd_atomic64_cas() so the
+                 *  first-caller-wins transition is race-free. */
+                rd_atomic64_t current_owner_thread; /**< Owning thread id; -1 =
+                                                       unowned. */
+                rd_atomic32_t
+                    ref_count; /**< Re-entrancy count for the owner. */
+        } rk_share_consumer;
 
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */
@@ -337,7 +474,11 @@ struct rd_kafka_s {
                                         *   (or equivalent).
                                         *   Used to enforce
                                         *   max.poll.interval.ms.
-                                        *   Only relevant for consumer. */
+                                        *   Set to INT64_MAX while polling
+                                        *   to avoid reaching
+                                        * max.poll.interval.ms. during that time
+                                        * frame. Only relevant for consumer. */
+
         /* First fatal error. */
         struct {
                 rd_atomic32_t err; /**< rd_kafka_resp_err_t */
@@ -353,18 +494,20 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        rd_kafka_metadata_internal_t
-            *rk_full_metadata;       /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
+        rd_ts_t rk_ts_full_metadata;                      /* Timestamp of most
+                                                           * recent full
+                                                           * metadata */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */
         int32_t rk_controllerid; /* ControllerId from metadata */
 
         /**< Producer: Delivery report mode */
-        enum { RD_KAFKA_DR_MODE_NONE,  /**< No delivery reports */
-               RD_KAFKA_DR_MODE_CB,    /**< Delivery reports through callback */
-               RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event API*/
+        enum {
+                RD_KAFKA_DR_MODE_NONE, /**< No delivery reports */
+                RD_KAFKA_DR_MODE_CB,   /**< Delivery reports through callback */
+                RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event
+                                           API*/
         } rk_drmode;
 
         /* Simple consumer count:
@@ -552,6 +695,16 @@ struct rd_kafka_s {
         } rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
+
+        /** Metadata refresh timer */
+        rd_kafka_timer_t metadata_refresh_tmr;
+        /** 1s interval timer */
+        rd_kafka_timer_t one_s_tmr;
+        /** Rebootstrap timer.
+         *  Will add bootstrap brokers again
+         *  when it's fired. */
+        rd_kafka_timer_t rebootstrap_tmr;
+
         thrd_t rk_thread;
 
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t
@@ -596,6 +749,12 @@ struct rd_kafka_s {
                  *   Use 10 < reconnect.backoff.jitter.ms / 2 < 1000.
                  */
                 rd_interval_t sparse_connect_random;
+
+                /**  Sparse connection timer: fires after remaining time of
+                 *   `sparse_connect_random` interval + 1ms.
+                 */
+                rd_kafka_timer_t sparse_connect_random_tmr;
+
                 /**< Lock for sparse_connect_random */
                 mtx_t sparse_connect_lock;
 
@@ -619,6 +778,103 @@ struct rd_kafka_s {
                 rd_kafka_q_t *callback_q; /**< SASL callback queue, if any. */
         } rk_sasl;
 
+        struct {
+                /* Fields for the control flow - unless guarded by lock, only
+                 * accessed from main thread. */
+                /**< Current state of the telemetry state machine. */
+                rd_kafka_telemetry_state_t state;
+                /**< Preferred broker for sending telemetry (Lock protected). */
+                rd_kafka_broker_t *preferred_broker;
+                /**< Timer for all the requests we schedule. */
+                rd_kafka_timer_t request_timer;
+                /**< Lock for preferred telemetry broker and state. */
+                mtx_t lock;
+                /**< Used to wait for termination (Lock protected). */
+                cnd_t termination_cnd;
+
+                /* Fields obtained from broker as a result of GetSubscriptions -
+                 * only accessed from main thread.
+                 */
+                rd_kafka_Uuid_t client_instance_id;
+                int32_t subscription_id;
+                rd_kafka_compression_t *accepted_compression_types;
+                size_t accepted_compression_types_cnt;
+                int32_t push_interval_ms;
+                int32_t telemetry_max_bytes;
+                rd_bool_t delta_temporality;
+                char **requested_metrics;
+                size_t requested_metrics_cnt;
+                /* TODO: Use rd_list_t to store the metrics */
+                int *matched_metrics;
+                size_t matched_metrics_cnt;
+
+                struct {
+                        rd_ts_t ts_last;  /**< Timestamp of last push */
+                        rd_ts_t ts_start; /**< Timestamp from when collection
+                                           *   started */
+                        /** Total rebalance latency (ms) up to previous push */
+                        uint64_t rebalance_latency_total;
+                        /** Total share fetch requests up to previous push */
+                        int64_t share_fetch_total;
+                        /** Total share bytes consumed up to previous push */
+                        int64_t share_bytes_consumed_total;
+                        /** Total acknowledgements sent up to previous push */
+                        int64_t acknowledgements_send_total;
+                        /** Total ShareGroupHeartbeat responses up to previous
+                         * push */
+                        int64_t heartbeat_total;
+                } rk_historic_c;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Current commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Current rebalance
+                                                       *   latency avg */
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t
+                            rk_avg_share_time_between_poll; /**< Current time
+                                                               between two
+                                                               share_consume_batch
+                                                             */
+                } rd_avg_current;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Rolled over commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Rolled over rebalance
+                                                       *   latency avg */
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t
+                            rk_avg_share_time_between_poll; /**< Rolled over
+                                                               time between two
+                                                               share_consume_batch
+                                                             */
+                } rd_avg_rollover;
+
+                /* Share consumer poll/batch tracking */
+                struct {
+                        rd_ts_t ts_last_poll_start;
+                        rd_ts_t ts_poll_start;
+                        rd_ts_t time_since_last_poll;
+                } rk_share_poll;
+
+                /* Share consumer fetch-RPC counter */
+                rd_atomic64_t share_fetch_total;
+
+                /* Share consumer total bytes consumed */
+                rd_atomic64_t share_bytes_consumed_total;
+
+                /* Share consumer record-level acknowledgements sent counter */
+                rd_atomic64_t acknowledgements_send_total;
+
+                /* Share consumer ShareGroupHeartbeat response counter */
+                rd_atomic64_t heartbeat_total;
+        } rk_telemetry;
+
         /* Test mocks */
         struct {
                 rd_kafka_mock_cluster_t *cluster; /**< Mock cluster, created
@@ -633,6 +889,70 @@ struct rd_kafka_s {
 
         } rk_mock;
 };
+
+/**
+ * @brief Map type for tracking inflight share acknowledgements.
+ *        Key: topic-partition, Value: ack batches for that partition.
+ */
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_share_ack_batches_t *)
+    rd_kafka_share_inflight_map_t;
+
+struct rd_kafka_share_s {
+        rd_kafka_t *rkshare_rk; /**< The shared rd_kafka_t instance */
+
+        /**
+         * TODO KIP-932: Decide whether we want to keep this here
+         * or move it in rd_kafka_t.
+         */
+        /** Map of inflight acknowledgements per topic-partition.
+         *  Key: rd_kafka_topic_partition_t*
+         *  Value: rd_kafka_share_ack_batches_t*
+         */
+        rd_kafka_share_inflight_map_t rkshare_inflight_acks;
+
+        /** Total number of unacknowledged messages across all partitions. */
+        int64_t rkshare_unacked_cnt;
+
+        /** Set when a FANOUT with fetch_more_records=true is sent.
+         *  Reset when records are received in the consumer queue.
+         *  Prevents duplicate fetch FANOUTs while one is in flight. */
+        rd_bool_t rkshare_fetch_more_records_requested;
+
+        /**
+         * Set to true when the consumer is closing. Will be used to:
+         * * prevent any new API call from the app.
+         * * check if SHARE_FETCH_RESPONSE is received to poll_cb only
+         * while closing
+         */
+        rd_bool_t rkshare_consumer_closing;
+
+        /** True when the consumer has an active subscription (i.e.
+         *  rd_kafka_share_subscribe() succeeded with a non-empty list
+         *  and rd_kafka_share_unsubscribe() has not been called since).
+         *  Written only on the app thread under rkshare_acquire/release;
+         *  read only in consume_batch while the same lock is held.
+         *  @locality app thread */
+        rd_bool_t rkshare_subscribed;
+};
+
+/**
+ * @brief Opaque message list returned by rd_kafka_share_poll().
+ *
+ * The struct is allocated as a flexible array sized to the exact message
+ * count returned by a single poll. The caller releases the list and all
+ * contained messages via rd_kafka_messages_destroy().
+ */
+/**
+ * TODO KIP-932: GA: Fix this to use FAM with message struct not
+ * pointer to messages.
+ */
+struct rd_kafka_messages_s {
+        size_t cnt;                  /**< Number of messages. */
+        rd_kafka_message_t *elems[]; /**< Message pointer array. */
+};
+
+rd_kafka_messages_t *rd_kafka_messages_new(size_t cnt);
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
 #define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
@@ -763,15 +1083,13 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
                              int timeout_ms,
                              unsigned int *curr_msgsp) {
         unsigned int cnt;
-        struct timespec tspec;
-
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
                 if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
                                       &rk->rk_curr_msgs.lock,
-                                      &tspec) == thrd_timedout)
+                                      abs_timeout) == thrd_timedout)
                         break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);
@@ -779,6 +1097,9 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
         *curr_msgsp = cnt;
         return cnt == 0;
 }
+
+void rd_kafka_decommissioned_broker_thread_join(rd_kafka_t *rk,
+                                                void *rkb_decommissioned);
 
 void rd_kafka_destroy_final(rd_kafka_t *rk);
 
@@ -860,9 +1181,12 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_MOCK        0x10000
 #define RD_KAFKA_DBG_ASSIGNOR    0x20000
 #define RD_KAFKA_DBG_CONF        0x40000
+#define RD_KAFKA_DBG_TELEMETRY   0x80000
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 
+/* Jitter Percent for exponential retry backoff */
+#define RD_KAFKA_RETRY_JITTER_PERCENT 20
 
 void rd_kafka_log0(const rd_kafka_conf_t *conf,
                    const rd_kafka_t *rk,
@@ -877,9 +1201,14 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
         rd_kafka_log0(&rk->rk_conf, rk, NULL, level, RD_KAFKA_DBG_NONE, fac,   \
                       __VA_ARGS__)
 
+#define rd_kafka_conf_is_dbg(conf, ctx)                                        \
+        unlikely((conf).debug &(RD_KAFKA_DBG_##ctx))
+
+#define rd_kafka_is_dbg(rk, ctx) (rd_kafka_conf_is_dbg(rk->rk_conf, ctx))
+
 #define rd_kafka_dbg(rk, ctx, fac, ...)                                        \
         do {                                                                   \
-                if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_##ctx)))      \
+                if (rd_kafka_is_dbg(rk, ctx))                                  \
                         rd_kafka_log0(&rk->rk_conf, rk, NULL, LOG_DEBUG,       \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -887,7 +1216,7 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 /* dbg() not requiring an rk, just the conf object, for early logging */
 #define rd_kafka_dbg0(conf, ctx, fac, ...)                                     \
         do {                                                                   \
-                if (unlikely((conf)->debug & (RD_KAFKA_DBG_##ctx)))            \
+                if (rd_kafka_conf_is_dbg(*conf, ctx))                          \
                         rd_kafka_log0(conf, NULL, NULL, LOG_DEBUG,             \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -907,10 +1236,11 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 #define rd_rkb_log(rkb, level, fac, ...)                                       \
         rd_rkb_log0(rkb, level, RD_KAFKA_DBG_NONE, fac, __VA_ARGS__)
 
+#define rd_rkb_is_dbg(rkb, ctx) rd_kafka_is_dbg((rkb)->rkb_rk, ctx)
+
 #define rd_rkb_dbg(rkb, ctx, fac, ...)                                         \
         do {                                                                   \
-                if (unlikely((rkb)->rkb_rk->rk_conf.debug &                    \
-                             (RD_KAFKA_DBG_##ctx))) {                          \
+                if (rd_rkb_is_dbg(rkb, ctx)) {                                 \
                         rd_rkb_log0(rkb, LOG_DEBUG, (RD_KAFKA_DBG_##ctx), fac, \
                                     __VA_ARGS__);                              \
                 }                                                              \
@@ -947,14 +1277,25 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
 
 rd_kafka_error_t *rd_kafka_get_fatal_error(rd_kafka_t *rk);
 
+#define rd_kafka_producer_can_have_fatal_errors(rk)                            \
+        (rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence)
+
+#define rd_kafka_consumer_can_have_fatal_errors(rk)                            \
+        (rk->rk_type == RD_KAFKA_CONSUMER &&                                   \
+         (rk->rk_conf.group_instance_id ||                                     \
+          rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER))
+
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code(rd_kafka_t *rk) {
         /* This is an optimization to avoid an atomic read which are costly
          * on some platforms:
-         * Fatal errors are currently only raised by the idempotent producer
-         * and static consumers (group.instance.id). */
-        if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
-            (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_conf.group_instance_id))
+         * Fatal errors are currently raised by:
+         * 1) the idempotent producer
+         * 2) static consumers (group.instance.id)
+         * 3) Group using consumer protocol (Introduced in KIP-848). See exact
+         *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat() */
+        if (rd_kafka_producer_can_have_fatal_errors(rk) ||
+            rd_kafka_consumer_can_have_fatal_errors(rk))
                 return rd_atomic32_get(&rk->rk_fatal.err);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -966,6 +1307,7 @@ extern char RD_TLS rd_kafka_thread_name[64];
 
 void rd_kafka_set_thread_name(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 void rd_kafka_set_thread_sysname(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
+void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread);
 
 int rd_kafka_path_is_dir(const char *path);
 rd_bool_t rd_kafka_dir_is_empty(const char *path);
@@ -998,7 +1340,7 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
         last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
 
         /* Application is blocked in librdkafka function, see
-         * rd_kafka_app_poll_blocking(). */
+         * rd_kafka_app_poll_start(). */
         if (last_poll == INT64_MAX)
                 return 0;
 
@@ -1024,9 +1366,32 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
+static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
+                                                        rd_kafka_q_t *rkq,
+                                                        rd_ts_t now,
+                                                        rd_bool_t is_blocking) {
+        if (rk->rk_type != RD_KAFKA_CONSUMER || RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                return;
+
+        if (!now)
+                now = rd_clock();
+        if (is_blocking)
                 rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+        if (rkq->rkq_ts_last_poll_end) {
+                int64_t poll_idle_ratio = 0;
+                rd_ts_t poll_interval   = now - rkq->rkq_ts_last_poll_start;
+                if (poll_interval) {
+                        rd_ts_t idle_interval = rkq->rkq_ts_last_poll_end -
+                                                rkq->rkq_ts_last_poll_start;
+                        poll_idle_ratio =
+                            idle_interval * 1000000 / poll_interval;
+                }
+                rd_avg_add(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
+                    poll_idle_ratio);
+                rkq->rkq_ts_last_poll_start = now;
+                rkq->rkq_ts_last_poll_end   = 0;
+        }
 }
 
 /**
@@ -1037,9 +1402,26 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
-                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
+                                                    rd_kafka_q_t *rkq) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                rd_ts_t now = rd_clock();
+                rd_atomic64_set(&rk->rk_ts_last_poll, now);
+                if (unlikely(rk->rk_cgrp &&
+                             rk->rk_cgrp->rkcg_group_protocol ==
+                                 RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
+                             rk->rk_cgrp->rkcg_flags &
+                                 RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp,
+                            "app polled after poll interval exceeded");
+                }
+                if (!rkq->rkq_ts_last_poll_end)
+                        rkq->rkq_ts_last_poll_end = now;
+                rd_dassert(rkq->rkq_ts_last_poll_end >=
+                           rkq->rkq_ts_last_poll_start);
+        }
 }
 
 
@@ -1054,5 +1436,73 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
 
+void rd_kafka_rebootstrap(rd_kafka_t *rk);
+
+void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk);
+
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk);
+
+void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
+
+rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
+                                                 rd_kafka_q_t *rkq,
+                                                 rd_kafka_op_t *rko);
+
+/**
+ * @brief Return an error object if the share consumer is closed or closing.
+ * @returns a newly-allocated error (owned by caller) or NULL if usable.
+ */
+rd_kafka_error_t *
+rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Return a response-error code if the share consumer is closed or
+ *        closing.
+ * @returns RD_KAFKA_RESP_ERR__STATE if closed/closing, else
+ *          RD_KAFKA_RESP_ERR_NO_ERROR.
+ */
+rd_kafka_resp_err_t
+rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Sentinel value stored in rk_share_consumer.current_owner_thread
+ *        when the gate is unowned. Chosen to never collide with a real
+ *        thread id on any supported platform. A zero-initialised struct
+ *        does NOT look unowned, which is intentional: a missing
+ *        init causes acquire to fail with __CONFLICT rather than
+ *        silently letting two threads pass.
+ */
+#define RD_KAFKA_SHARE_NO_CURRENT_THREAD ((int64_t)(-1))
+
+/**
+ * @brief Acquire single-thread ownership of the share consumer.
+ *
+ * Every public share consumer API must call this on entry and pair
+ * it with rd_kafka_share_release() on every return path. The owning
+ * thread may re-enter (nested share calls bump the ref_count counter
+ * and release decrements it).
+ *
+ * @returns NULL on success, or a newly-allocated rd_kafka_error_t (owned
+ *          by the caller) on rejection:
+ *           - RD_KAFKA_RESP_ERR__STATE on NULL rkshare, or when called
+ *             from inside the user-defined acknowledgement commit
+ *             callback.
+ *           - RD_KAFKA_RESP_ERR__CONFLICT on concurrent entry from a
+ *             different application thread.
+ */
+rd_kafka_error_t *rd_kafka_share_acquire(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Release ownership acquired by rd_kafka_share_acquire().
+ *
+ * Tolerates NULL rkshare (no-op) so error paths can call it
+ * unconditionally.
+ */
+void rd_kafka_share_release(rd_kafka_share_t *rkshare);
+
+void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
+                                     rd_kafka_broker_t *rkb,
+                                     rd_bool_t should_fetch,
+                                     rd_bool_t should_leave);
 
 #endif /* _RDKAFKA_INT_H_ */

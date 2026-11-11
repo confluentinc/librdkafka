@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2016-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -86,6 +87,9 @@ static void do_test_fetch_max_bytes(void) {
   if (!c)
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
   delete conf;
+
+  /* For next consumer */
+  test_wait_topic_exists(c->c_ptr(), topic.c_str(), 5000);
 
   /* Subscribe */
   std::vector<std::string> topics;

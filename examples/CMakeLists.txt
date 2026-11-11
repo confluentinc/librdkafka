@@ -53,6 +53,18 @@ target_link_libraries(incremental_alter_configs PUBLIC rdkafka)
 add_executable(user_scram user_scram.c ${win32_sources})
 target_link_libraries(user_scram PUBLIC rdkafka)
 
+add_executable(describe_topics describe_topics.c ${win32_sources})
+target_link_libraries(describe_topics PUBLIC rdkafka)
+
+add_executable(describe_cluster describe_cluster.c ${win32_sources})
+target_link_libraries(describe_cluster PUBLIC rdkafka)
+
+add_executable(list_offsets list_offsets.c ${win32_sources})
+target_link_libraries(list_offsets PUBLIC rdkafka)
+
+add_executable(elect_leaders elect_leaders.c ${win32_sources})
+target_link_libraries(elect_leaders PUBLIC rdkafka)
+
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)
     add_executable(rdkafka_example rdkafka_example.c)
@@ -63,4 +75,14 @@ if(NOT WIN32)
 
     add_executable(kafkatest_verifiable_client kafkatest_verifiable_client.cpp)
     target_link_libraries(kafkatest_verifiable_client PUBLIC rdkafka++)
+
+    add_executable(share_consumer share_consumer.c)
+    target_link_libraries(share_consumer PUBLIC rdkafka)
+
+    add_executable(share_consumer_commit_sync share_consumer_commit_sync.c)
+    target_link_libraries(share_consumer_commit_sync PUBLIC rdkafka)
+
+    add_executable(share_consumer_commit_async share_consumer_commit_async.c)
+    target_link_libraries(share_consumer_commit_async PUBLIC rdkafka)
+
 endif(NOT WIN32)

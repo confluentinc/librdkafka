@@ -1,15 +1,21 @@
 EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	rdkafka_complex_consumer_example rdkafka_complex_consumer_example_cpp \
 	kafkatest_verifiable_client \
-	producer consumer idempotent_producer transactions \
+	producer consumer share_consumer share_consumer_commit_async \
+	share_consumer_commit_sync \
+	idempotent_producer transactions \
 	delete_records \
 	openssl_engine_example_cpp \
 	list_consumer_groups \
 	describe_consumer_groups \
+	describe_topics \
+	describe_cluster \
 	list_consumer_group_offsets \
 	alter_consumer_group_offsets \
 	incremental_alter_configs \
 	user_scram \
+	list_offsets \
+	elect_leaders \
 	misc
 
 all: $(EXAMPLES)
@@ -46,7 +52,27 @@ producer_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a producer.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) producer.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
+# Not part of $(EXAMPLES): requires libschemaregistry and avro-cpp, which
+# librdkafka does not depend on, and a C++17 compiler.
+# Build explicitly with `make producer_schema_registry`.
+producer_schema_registry: ../src-cpp/librdkafka++.a ../src/librdkafka.a producer_schema_registry.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++17 $@.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a \
+		-lschemaregistry -lavrocpp $(LIBS)
+
 consumer: ../src/librdkafka.a consumer.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+share_consumer: ../src/librdkafka.a share_consumer.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+share_consumer_commit_async: ../src/librdkafka.a share_consumer_commit_async.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+share_consumer_commit_sync: ../src/librdkafka.a share_consumer_commit_sync.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 
@@ -71,6 +97,14 @@ list_consumer_groups: ../src/librdkafka.a list_consumer_groups.c
 		../src/librdkafka.a $(LIBS)
 
 describe_consumer_groups: ../src/librdkafka.a describe_consumer_groups.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_topics: ../src/librdkafka.a describe_topics.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_cluster: ../src/librdkafka.a describe_cluster.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 
@@ -135,6 +169,14 @@ openssl_engine_example_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a openss
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
 user_scram: ../src/librdkafka.a user_scram.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+list_offsets: ../src/librdkafka.a list_offsets.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+elect_leaders: ../src/librdkafka.a elect_leaders.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

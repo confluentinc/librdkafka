@@ -528,19 +528,41 @@ static void do_test_ListConsumerGroups(const char *what,
         q = useq ? useq : rd_kafka_queue_new(rk);
 
         if (with_options) {
-                rd_kafka_consumer_group_state_t duplicate[2] = {
+                rd_kafka_error_t *error;
+                rd_kafka_consumer_group_state_t duplicate_states[2] = {
                     RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY,
                     RD_KAFKA_CONSUMER_GROUP_STATE_EMPTY};
+                rd_kafka_consumer_group_type_t duplicate_types[2] = {
+                    RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC,
+                    RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC};
+                rd_kafka_consumer_group_type_t unknown_type[1] = {
+                    RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN};
 
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS);
 
                 /* Test duplicate error on match states */
-                rd_kafka_error_t *error =
-                    rd_kafka_AdminOptions_set_match_consumer_group_states(
-                        options, duplicate, 2);
+                error = rd_kafka_AdminOptions_set_match_consumer_group_states(
+                    options, duplicate_states, 2);
                 TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
                             "Expected error on duplicate states,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test duplicate error on match group types */
+                error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                    options, duplicate_types, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate group types,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test invalid args error on setting UNKNOWN group type in
+                 * match group types */
+                error = rd_kafka_AdminOptions_set_match_consumer_group_types(
+                    options, unknown_type, 1);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on Unknown group type,"
                             " got no error");
                 rd_kafka_error_destroy(error);
 
@@ -634,9 +656,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
         char errstr[512];
         const char *errstr2;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         test_timing_t timing;
         rd_kafka_event_t *rkev;
-        const rd_kafka_DeleteGroups_result_t *res;
+        const rd_kafka_DescribeConsumerGroups_result_t *res;
         const rd_kafka_ConsumerGroupDescription_t **resgroups;
         size_t resgroup_cnt;
         void *my_opaque = NULL, *opaque;
@@ -658,6 +681,17 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 err         = rd_kafka_AdminOptions_set_request_timeout(
                     options, exp_timeout, errstr, sizeof(errstr));
                 TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                if ((error =
+                         rd_kafka_AdminOptions_set_include_authorized_operations(
+                             options, 0))) {
+                        fprintf(stderr,
+                                "%% Failed to set require authorized "
+                                "operations: %s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        TEST_FAIL(
+                            "Failed to set include authorized operations\n");
+                }
 
                 if (useq) {
                         my_opaque = (void *)456;
@@ -711,6 +745,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         /* The returned groups should be in the original order, and
          * should all have timed out. */
         for (i = 0; i < TEST_DESCRIBE_CONSUMER_GROUPS_CNT; i++) {
+                size_t authorized_operation_cnt;
                 TEST_ASSERT(
                     !strcmp(group_names[i],
                             rd_kafka_ConsumerGroupDescription_group_id(
@@ -725,6 +760,12 @@ static void do_test_DescribeConsumerGroups(const char *what,
                     group_names[i],
                     rd_kafka_error_string(
                         rd_kafka_ConsumerGroupDescription_error(resgroups[i])));
+
+                rd_kafka_ConsumerGroupDescription_authorized_operations(
+                    resgroups[i], &authorized_operation_cnt);
+                TEST_ASSERT(authorized_operation_cnt == 0,
+                            "Got authorized operations"
+                            "when not requested");
         }
 
         rd_kafka_event_destroy(rkev);
@@ -740,6 +781,219 @@ destroy:
         if (!useq)
                 rd_kafka_queue_destroy(q);
 #undef TEST_DESCRIBE_CONSUMER_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief DescribeTopics tests
+ *
+ *
+ *
+ */
+static void do_test_DescribeTopics(const char *what,
+                                   rd_kafka_t *rk,
+                                   rd_kafka_queue_t *useq,
+                                   int with_options) {
+        rd_kafka_queue_t *q;
+#define TEST_DESCRIBE_TOPICS_CNT 4
+        const char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
+        rd_kafka_TopicCollection_t *topics;
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        int i;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DescribeTopics_result_t *res;
+        const rd_kafka_TopicDescription_t **restopics;
+        size_t restopic_cnt;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s DescribeTopics with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
+                topic_names[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        }
+
+        topics = rd_kafka_TopicCollection_of_topic_names(
+            topic_names, TEST_DESCRIBE_TOPICS_CNT);
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err         = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                if ((error =
+                         rd_kafka_AdminOptions_set_include_authorized_operations(
+                             options, 0))) {
+                        fprintf(stderr,
+                                "%% Failed to set topic authorized operations: "
+                                "%s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        TEST_FAIL(
+                            "Failed to set topic authorized operations\n");
+                }
+
+                if (useq) {
+                        my_opaque = (void *)456;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "DescribeTopics");
+        TEST_SAY("Call DescribeTopics, timeout is %dms\n", exp_timeout);
+        rd_kafka_DescribeTopics(rk, topics, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DescribeTopics.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DescribeTopics: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeTopics_result(rkev);
+        TEST_ASSERT(res, "expected DescribeTopics_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error (Fail while waiting for controller)*/
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected DescribeTopics to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        /* Extract topics, should return 0 topics. */
+        restopics = rd_kafka_DescribeTopics_result_topics(res, &restopic_cnt);
+        TEST_ASSERT(!restopics && restopic_cnt == 0,
+                    "expected no result topics, got %p cnt %" PRIusz, restopics,
+                    restopic_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        for (i = 0; i < TEST_DESCRIBE_TOPICS_CNT; i++) {
+                rd_free((char *)topic_names[i]);
+        }
+        rd_kafka_TopicCollection_destroy(topics);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+#undef TEST_DESCRIBE_TOPICS_CNT
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief DescribeCluster tests
+ *
+ *
+ *
+ */
+static void do_test_DescribeCluster(const char *what,
+                                    rd_kafka_t *rk,
+                                    rd_kafka_queue_t *useq,
+                                    int with_options) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DescribeCluster_result_t *res;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s DescribeCluster with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                err         = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+                if ((error =
+                         rd_kafka_AdminOptions_set_include_authorized_operations(
+                             options, 0))) {
+                        fprintf(stderr,
+                                "%% Failed to set cluster authorized "
+                                "operations: %s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        TEST_FAIL(
+                            "Failed to set cluster authorized operations\n");
+                }
+
+                if (useq) {
+                        my_opaque = (void *)456;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "DescribeCluster");
+        TEST_SAY("Call DescribeCluster, timeout is %dms\n", exp_timeout);
+        rd_kafka_DescribeCluster(rk, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DescribeCluster.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DescribeCluster: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeCluster_result(rkev);
+        TEST_ASSERT(res, "expected DescribeCluster_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error (Fail while waiting for controller)*/
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected DescribeCluster to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        rd_kafka_event_destroy(rkev);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
 
         SUB_TEST_PASS();
 }
@@ -952,8 +1206,8 @@ static void do_test_AclBinding() {
         char errstr[512];
         rd_kafka_AclBinding_t *new_acl;
 
-        rd_bool_t valid_resource_types[]         = {rd_false, rd_false, rd_true,
-                                            rd_true,  rd_true,  rd_false};
+        rd_bool_t valid_resource_types[] = {
+            rd_false, rd_false, rd_true, rd_true, rd_true, rd_true, rd_false};
         rd_bool_t valid_resource_pattern_types[] = {
             rd_false, rd_false, rd_false, rd_true, rd_true, rd_false};
         rd_bool_t valid_acl_operation[] = {
@@ -1084,7 +1338,7 @@ static void do_test_AclBindingFilter() {
         char errstr[512];
         rd_kafka_AclBindingFilter_t *new_acl_filter;
 
-        rd_bool_t valid_resource_types[]         = {rd_false, rd_true, rd_true,
+        rd_bool_t valid_resource_types[] = {rd_false, rd_true, rd_true, rd_true,
                                             rd_true,  rd_true, rd_false};
         rd_bool_t valid_resource_pattern_types[] = {
             rd_false, rd_true, rd_true, rd_true, rd_true, rd_false};
@@ -2123,6 +2377,137 @@ static void do_test_AlterUserScramCredentials(const char *what,
         SUB_TEST_PASS();
 }
 
+static void do_test_ElectLeaders(const char *what,
+                                 rd_kafka_t *rk,
+                                 rd_kafka_queue_t *useq,
+                                 int with_options,
+                                 rd_kafka_ElectionType_t election_type) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_ElectLeaders_result_t *res;
+        rd_kafka_ElectLeaders_t *duplicate_elect_leaders;
+        rd_kafka_ElectLeaders_t *elect_leaders;
+        int exp_timeout = MY_SOCKET_TIMEOUT_MS;
+        test_timing_t timing;
+        rd_kafka_topic_partition_list_t *partitions;
+        char errstr[512];
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s ElectLeaders with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        partitions = rd_kafka_topic_partition_list_new(3);
+        rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
+        rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
+        rd_kafka_topic_partition_list_add(partitions, "topic1", 1);
+        elect_leaders = rd_kafka_ElectLeaders_new(election_type, partitions);
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        partitions = rd_kafka_topic_partition_list_new(3);
+        rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
+        rd_kafka_topic_partition_list_add(partitions, "topic3", 15);
+        rd_kafka_topic_partition_list_add(partitions, "topic1", 9);
+        duplicate_elect_leaders =
+            rd_kafka_ElectLeaders_new(election_type, partitions);
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_ELECTLEADERS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                if (useq) {
+                        my_opaque = (void *)99981;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        /*Duplicate topic-partition list*/
+        TIMING_START(&timing, "ElectLeaders");
+        TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
+        rd_kafka_ElectLeaders(rk, duplicate_elect_leaders, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 10);
+        rd_kafka_ElectLeaders_destroy(duplicate_elect_leaders);
+
+        /* Poll result queue */
+        TIMING_START(&timing, "ElectLeaders.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT(&timing, 0, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_ElectLeaders_result(rkev);
+        TEST_ASSERT(res, "expected ElectLeaders_result, not %s",
+                    rd_kafka_event_name(rkev));
+        /*Expecting error*/
+        err                                = rd_kafka_event_error(rkev);
+        const char *event_errstr_duplicate = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err, "expected ElectLeaders to fail");
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected RD_KAFKA_RESP_ERR__INVALID_ARG, not %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(strcmp(event_errstr_duplicate,
+                           "Duplicate partitions specified") == 0,
+                    "expected \"Duplicate partitions specified\", not \"%s\"",
+                    event_errstr_duplicate);
+        rd_kafka_event_destroy(rkev);
+
+        /*Correct topic-partition list*/
+        TIMING_START(&timing, "ElectLeaders");
+        TEST_SAY("Call ElectLeaders, timeout is %dms\n", exp_timeout);
+        rd_kafka_ElectLeaders(rk, elect_leaders, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 10);
+        rd_kafka_ElectLeaders_destroy(elect_leaders);
+
+        /* Poll result queue */
+        TIMING_START(&timing, "ElectLeaders.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("ElectLeaders: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_ElectLeaders_result(rkev);
+        TEST_ASSERT(res, "expected ElectLeaders_result, not %s",
+                    rd_kafka_event_name(rkev));
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+        /*Expecting error*/
+        err                   = rd_kafka_event_error(rkev);
+        const char *event_err = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err, "expected ElectLeaders to fail");
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected RD_KAFKA_RESP_ERR__TIMED_OUT, not %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(strcmp(event_err,
+                           "Failed while waiting for controller: "
+                           "Local: Timed out") == 0,
+                    "expected \"Failed while waiting for controller: "
+                    "Local: Timed out\", not \"%s\"",
+                    event_err);
+        rd_kafka_event_destroy(rkev);
+
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
+}
+
 /**
  * @brief Test a mix of APIs using the same replyq.
  *
@@ -2323,6 +2708,10 @@ static void do_test_unclean_destroy(rd_kafka_type_t cltype, int with_mainq) {
          * rely on the controller not being found. */
         test_conf_set(conf, "bootstrap.servers", "");
         test_conf_set(conf, "socket.timeout.ms", "60000");
+        if (test_consumer_group_protocol()) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol());
+        }
 
         rk = rd_kafka_new(cltype, conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "kafka_new(%d): %s", cltype, errstr);
@@ -2380,17 +2769,18 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS,                \
                     RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,               \
                     RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
+                    RD_KAFKA_ADMIN_OP_ELECTLEADERS,                            \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */                   \
         }
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[16];
+                const rd_kafka_admin_op_t valid_apis[17];
         } matrix[] = {
             {"request_timeout", _all_apis},
             {"operation_timeout",
              {RD_KAFKA_ADMIN_OP_CREATETOPICS, RD_KAFKA_ADMIN_OP_DELETETOPICS,
               RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
-              RD_KAFKA_ADMIN_OP_DELETERECORDS}},
+              RD_KAFKA_ADMIN_OP_DELETERECORDS, RD_KAFKA_ADMIN_OP_ELECTLEADERS}},
             {"validate_only",
              {RD_KAFKA_ADMIN_OP_CREATETOPICS,
               RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
@@ -2529,6 +2919,10 @@ static rd_kafka_t *create_admin_client(rd_kafka_type_t cltype) {
          * rely on the controller not being found. */
         test_conf_set(conf, "bootstrap.servers", "");
         test_conf_set(conf, "socket.timeout.ms", MY_SOCKET_TIMEOUT_MS_STR);
+        if (test_consumer_group_protocol()) {
+                test_conf_set(conf, "group.protocol",
+                              test_consumer_group_protocol());
+        }
         /* For use with the background queue */
         rd_kafka_conf_set_background_event_cb(conf, background_event_cb);
 
@@ -2578,6 +2972,14 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                        rd_false);
         do_test_DescribeConsumerGroups("main queue, options", rk, mainq, 1,
                                        rd_false);
+
+        do_test_DescribeTopics("temp queue, no options", rk, NULL, 0);
+        do_test_DescribeTopics("temp queue, options", rk, NULL, 1);
+        do_test_DescribeTopics("main queue, options", rk, mainq, 1);
+
+        do_test_DescribeCluster("temp queue, no options", rk, NULL, 0);
+        do_test_DescribeCluster("temp queue, options", rk, NULL, 1);
+        do_test_DescribeCluster("main queue, options", rk, mainq, 1);
 
         do_test_DeleteGroups("temp queue, no options", rk, NULL, 0, rd_false);
         do_test_DeleteGroups("temp queue, options", rk, NULL, 1, rd_false);
@@ -2635,6 +3037,23 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         do_test_AlterUserScramCredentials("main queue", rk, mainq);
         do_test_AlterUserScramCredentials("temp queue", rk, NULL);
+
+        do_test_ElectLeaders("main queue, options, Preffered Elections", rk,
+                             mainq, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+        do_test_ElectLeaders("main queue, options, Unclean Elections", rk,
+                             mainq, 1, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+        do_test_ElectLeaders("main queue, no options, Preffered Elections", rk,
+                             mainq, 0, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+        do_test_ElectLeaders("main queue, no options, Unclean Elections", rk,
+                             mainq, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+        do_test_ElectLeaders("temp queue, options, Preffered Elections", rk,
+                             NULL, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+        do_test_ElectLeaders("temp queue, options, Unclean Elections", rk, NULL,
+                             1, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
+        do_test_ElectLeaders("temp queue, no options, Preffered Elections", rk,
+                             NULL, 0, RD_KAFKA_ELECTION_TYPE_PREFERRED);
+        do_test_ElectLeaders("temp queue, no options, Unclean Elections", rk,
+                             NULL, 0, RD_KAFKA_ELECTION_TYPE_UNCLEAN);
 
         do_test_mix(rk, mainq);
 

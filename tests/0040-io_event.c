@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,7 +75,8 @@ int main_0040_io_event(int argc, char **argv) {
 
         rk_p  = test_create_producer();
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-        err   = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
+        test_wait_topic_exists(rk_p, topic, 5000);
+        err = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
         TEST_ASSERT(!err, "Topic auto creation failed: %s",
                     rd_kafka_err2str(err));
 
@@ -168,13 +170,17 @@ int main_0040_io_event(int argc, char **argv) {
                                                     "expecting message\n");
                                         if (rd_kafka_event_error(rkev) ==
                                             RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                                                rd_kafka_assign(
-                                                    rk_c,
+                                                test_consumer_assign_by_rebalance_protocol(
+                                                    "rebalance event", rk_c,
                                                     rd_kafka_event_topic_partition_list(
                                                         rkev));
                                                 expecting_io = _NOPE;
-                                        } else
-                                                rd_kafka_assign(rk_c, NULL);
+                                        } else {
+                                                test_consumer_unassign_by_rebalance_protocol(
+                                                    "rebalance event", rk_c,
+                                                    rd_kafka_event_topic_partition_list(
+                                                        rkev));
+                                        }
                                         break;
 
                                 case RD_KAFKA_EVENT_FETCH:

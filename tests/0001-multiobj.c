@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -92,6 +93,9 @@ int main_0001_multiobj(int argc, char **argv) {
                 /* Topic is created on the first iteration. */
                 if (i > 0)
                         TIMING_ASSERT(&t_full, 0, 999);
+                else
+                        /* Allow metadata propagation. */
+                        rd_sleep(1);
         }
 
         return 0;

@@ -468,6 +468,52 @@ static void do_test_conf_copy(const char *topic) {
 }
 
 
+/**
+ * @brief Test for Issue #4142: Segfault when on_conf_destroy callback
+ *        is registered and rd_kafka_new() fails.
+ *
+ * The bug was in the error handling path of rd_kafka_new() where interceptors
+ * were being destroyed twice, causing a segfault when the application
+ * properly called rd_kafka_conf_destroy() after rd_kafka_new() failure.
+ */
+static rd_kafka_resp_err_t on_conf_destroy_failed_new(void *ic_opaque) {
+        int *call_cnt = (int *)ic_opaque;
+        (*call_cnt)++;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static void do_test_conf_destroy_interceptor_with_failed_new(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        char errstr[512];
+        int call_cnt = 0;
+
+        TEST_SAY(_C_MAG "[ %s ]\n" _C_CLR, __FUNCTION__);
+
+        conf = rd_kafka_conf_new();
+
+        TEST_CALL_ERR__(rd_kafka_conf_interceptor_add_on_conf_destroy(
+            conf, "on_conf_destroy_failed_new", on_conf_destroy_failed_new,
+            &call_cnt));
+
+        /* Set invalid SSL configuration to cause rd_kafka_new() to fail */
+        test_conf_set(conf, "security.protocol", "ssl");
+        test_conf_set(conf, "ssl.ca.location", "/dev/null");
+
+        /* This should fail due to invalid SSL config */
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(
+            !rk, "rd_kafka_new() should have failed with invalid SSL config");
+
+        rd_kafka_conf_destroy(conf);
+
+        /* Verify on_conf_destroy was called exactly once */
+        TEST_ASSERT(call_cnt == 1,
+                    "on_conf_destroy should have been called once, got %d",
+                    call_cnt);
+}
+
+
 int main_0064_interceptors(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
@@ -476,6 +522,8 @@ int main_0064_interceptors(int argc, char **argv) {
         do_test_consumer(topic);
 
         do_test_conf_copy(topic);
+
+        do_test_conf_destroy_interceptor_with_failed_new();
 
         return 0;
 }

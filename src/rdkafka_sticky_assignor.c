@@ -819,6 +819,7 @@ isBalanced(rd_kafka_t *rk,
          *       currentAssignment's element we get both the consumer
          *       and partition list in elem here. */
         RD_LIST_FOREACH(elem, sortedCurrentSubscriptions, i) {
+                int j;
                 const char *consumer = (const char *)elem->key;
                 const rd_kafka_topic_partition_list_t *potentialTopicPartitions;
                 const rd_kafka_topic_partition_list_t *consumerPartitions;
@@ -836,9 +837,9 @@ isBalanced(rd_kafka_t *rk,
 
                 /* Otherwise make sure it can't get any more partitions */
 
-                for (i = 0; i < potentialTopicPartitions->cnt; i++) {
+                for (j = 0; j < potentialTopicPartitions->cnt; j++) {
                         const rd_kafka_topic_partition_t *partition =
-                            &potentialTopicPartitions->elems[i];
+                            &potentialTopicPartitions->elems[j];
                         const char *otherConsumer;
                         int otherConsumerPartitionCount;
 
@@ -2125,9 +2126,10 @@ static rd_kafkap_bytes_t *rd_kafka_sticky_assignor_get_metadata(
         const rd_kafka_topic_partition_field_t fields[] = {
             RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
-        rd_kafka_buf_write_topic_partitions(rkbuf, state->prev_assignment,
-                                            rd_false /*skip invalid offsets*/,
-                                            rd_false /*any offset*/, fields);
+        rd_kafka_buf_write_topic_partitions(
+            rkbuf, state->prev_assignment, rd_false /*skip invalid offsets*/,
+            rd_false /*any offset*/, rd_false /*don't use topic id*/,
+            rd_true /*use topic name*/, fields);
         rd_kafka_buf_write_i32(rkbuf, state->generation_id);
 
         /* Get binary buffer and allocate a new Kafka Bytes with a copy. */
@@ -3025,6 +3027,10 @@ static int ut_testLargeAssignmentWithMultipleConsumersLeaving(
     rd_kafka_t *rk,
     const rd_kafka_assignor_t *rkas,
     rd_kafka_assignor_ut_rack_config_t parametrization) {
+        if (rd_unittest_with_valgrind)
+                RD_UT_SKIP(
+                    "Skipping large assignment test when using Valgrind");
+
         rd_kafka_resp_err_t err;
         char errstr[512];
         rd_kafka_metadata_t *metadata;

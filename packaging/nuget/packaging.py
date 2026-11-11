@@ -84,7 +84,7 @@ def magic_mismatch(path, a):
 #  p       - project (e.g., "confluent-kafka-python")
 #  bld     - builder (e.g., "travis")
 #  plat    - platform ("osx", "linux", ..)
-#  dist    - distro or runtime ("centos6", "mingw", "msvcr", "alpine", ..).
+#  dist    - distro or runtime ("centos8", "mingw", "msvcr", "alpine", ..).
 #  arch    - arch ("x64", ..)
 #  tag     - git tag
 #  sha     - git sha
@@ -380,7 +380,7 @@ class Package (object):
                         attr = attr[1:]
 
                         if attr in a.info and \
-                           a.info[attr] != m.attributes[origattr]:
+                           a.info[attr] == m.attributes[origattr]:
                             found = False
                             break
                     else:

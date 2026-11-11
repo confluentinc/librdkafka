@@ -44,7 +44,7 @@
  */
 static void do_test_sticky_partitioning(int sticky_delay) {
   std::string topic = Test::mk_topic_name(__FILE__, 1);
-  Test::create_topic(NULL, topic.c_str(), 3, 1);
+  Test::create_topic_wait_exists(NULL, topic.c_str(), 3, 1, 5000);
 
   RdKafka::Conf *conf;
   Test::conf_init(&conf, NULL, 0);
@@ -148,8 +148,8 @@ static void do_test_sticky_partitioning(int sticky_delay) {
   /* When sticky.partitioning.linger.ms is long (greater than expected
    * length of run), one partition should be sticky and receive messages. */
   if (sticky_delay == 5000 && num_partitions_active > 1)
-    Test::Fail(tostr() << "Expected only 1 partition to receive msgs"
-                       << " but " << num_partitions_active
+    Test::Fail(tostr() << "Expected only 1 partition to receive msgs" << " but "
+                       << num_partitions_active
                        << " partitions received msgs.");
 
   /* When sticky.partitioning.linger.ms is short (sufficiently smaller than

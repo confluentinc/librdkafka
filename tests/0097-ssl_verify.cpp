@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,6 +34,8 @@
 #include <streambuf>
 #include "testcpp.h"
 #include "tinycthread.h"
+
+namespace TestSSLVerify {
 
 static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
     /* [RdKafka::CERT_PUBLIC_KEY] = */
@@ -117,6 +120,62 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
   }
 };
 
+/**
+ * @name Test event callback.
+ */
+class TestEventCb : public RdKafka::EventCb {
+ public:
+  bool should_succeed;
+  /* True only when the broker is expected to reject the client's cert
+   * (untrusted client key + mutual TLS). Used to accept the broker's TLS
+   * alert only in that case. */
+  bool expect_client_auth_fail;
+
+  TestEventCb(bool should_succeed, bool expect_client_auth_fail) :
+      should_succeed(should_succeed),
+      expect_client_auth_fail(expect_client_auth_fail) {
+  }
+
+  void event_cb(RdKafka::Event &event) {
+    switch (event.type()) {
+    case RdKafka::Event::EVENT_LOG:
+      Test::Say("Log: " + event.str() + "\n");
+      break;
+    case RdKafka::Event::EVENT_ERROR:
+      if (should_succeed)
+        Test::Fail("Unexpected error event, got: " + event.str());
+      else if (event.err() != RdKafka::ERR__SSL &&
+               event.err() != RdKafka::ERR__ALL_BROKERS_DOWN)
+        Test::Fail(
+            "Expected _SSL or _ALL_BROKERS_DOWN error codes"
+            ", got: " +
+            RdKafka::err2str(event.err()));
+      else if (event.err() == RdKafka::ERR__SSL) {
+        bool expected = false;
+        Test::Say("SSL error: " + event.str() + "\n");
+        if (expect_client_auth_fail) {
+          /* Broker rejects the untrusted client cert. Different broker TLS
+           * stacks send 42 (bad_certificate) or 40 (handshake_failure since
+           * Java 23). */
+          if (event.str().find("alert number 42") != std::string::npos ||
+              event.str().find("alert number 40") != std::string::npos)
+            expected = true;
+        } else if (event.str().find(
+                       "broker certificate could not be verified") !=
+                   std::string::npos) {
+          /* Client couldn't verify the broker's cert. */
+          expected = true;
+        }
+
+        if (!expected)
+          Test::Fail("Unexpected SSL error message, got: " + event.str());
+      }
+      break;
+    default:
+      break;
+    }
+  }
+};
 
 /**
  * @brief Set SSL PEM cert/key using configuration property.
@@ -126,36 +185,41 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
  * @param loc_prop ssl.X.location property that will be cleared.
  * @param pem_prop ssl.X.pem property that will be set.
  * @param cert_type Certificate type.
+ * @param use_conf_value_file Read the file from existing configuration value,
+ *                            instead of the one in the environment variable.
  */
 static void conf_location_to_pem(RdKafka::Conf *conf,
                                  std::string loc_prop,
                                  std::string pem_prop,
-                                 RdKafka::CertificateType cert_type) {
+                                 RdKafka::CertificateType cert_type,
+                                 bool use_conf_value_file) {
   std::string loc;
 
   std::string errstr;
+  if (use_conf_value_file && conf->get(loc_prop, loc) != RdKafka::Conf::CONF_OK)
+    Test::Fail("Failed to get " + loc_prop);
   if (conf->set(loc_prop, "", errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to reset " + loc_prop + ": " + errstr);
 
-  const char *p;
-  p = test_getenv(envname[cert_type][RdKafka::CERT_ENC_PEM].c_str(), NULL);
-  if (!p)
-    Test::Fail(
-        "Invalid test environment: "
-        "Missing " +
-        envname[cert_type][RdKafka::CERT_ENC_PEM] +
-        " env variable: make sure trivup is up to date");
+  if (!use_conf_value_file) {
+    const char *p;
+    p = test_getenv(envname[cert_type][RdKafka::CERT_ENC_PEM].c_str(), NULL);
+    if (!p)
+      Test::Fail(
+          "Invalid test environment: "
+          "Missing " +
+          envname[cert_type][RdKafka::CERT_ENC_PEM] +
+          " env variable: make sure trivup is up to date");
 
-  loc = p;
-
+    loc = p;
+  }
 
   /* Read file */
   std::ifstream ifs(loc.c_str());
   std::string pem((std::istreambuf_iterator<char>(ifs)),
                   std::istreambuf_iterator<char>());
 
-  Test::Say("Read env " + envname[cert_type][RdKafka::CERT_ENC_PEM] + "=" +
-            loc + " from disk and changed to in-memory " + pem_prop +
+  Test::Say("Read " + loc + " from disk and changed to in-memory " + pem_prop +
             " string\n");
 
   if (conf->set(pem_prop, pem, errstr) != RdKafka::Conf::CONF_OK)
@@ -172,7 +236,8 @@ static void conf_location_to_pem(RdKafka::Conf *conf,
 static void conf_location_to_setter(RdKafka::Conf *conf,
                                     std::string loc_prop,
                                     RdKafka::CertificateType cert_type,
-                                    RdKafka::CertificateEncoding encoding) {
+                                    RdKafka::CertificateEncoding encoding,
+                                    bool use_conf_value_file) {
   std::string loc;
   static const std::string encnames[] = {
       "PKCS#12",
@@ -182,23 +247,26 @@ static void conf_location_to_setter(RdKafka::Conf *conf,
 
   /* Clear the config property (e.g., ssl.key.location) */
   std::string errstr;
+  if (use_conf_value_file && conf->get(loc_prop, loc) != RdKafka::Conf::CONF_OK)
+    Test::Fail("Failed to get " + loc_prop);
   if (conf->set(loc_prop, "", errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to reset " + loc_prop);
 
-  const char *p;
-  p = test_getenv(envname[cert_type][encoding].c_str(), NULL);
-  if (!p)
-    Test::Fail(
-        "Invalid test environment: "
-        "Missing " +
-        envname[cert_type][encoding] +
-        " env variable: make sure trivup is up to date");
+  if (!use_conf_value_file) {
+    const char *p;
+    p = test_getenv(envname[cert_type][encoding].c_str(), NULL);
+    if (!p)
+      Test::Fail(
+          "Invalid test environment: "
+          "Missing " +
+          envname[cert_type][encoding] +
+          " env variable: make sure trivup is up to date");
 
-  loc = p;
+    loc = p;
+  }
 
-  Test::Say(tostr() << "Reading " << loc_prop << " file " << loc << " as "
-                    << encnames[encoding] << " from env "
-                    << envname[cert_type][encoding] << "\n");
+  Test::Say(tostr() << "Reading file as " << encnames[encoding] << " from "
+                    << loc << "\n");
 
   /* Read file */
   std::ifstream ifs(loc.c_str(), std::ios::binary | std::ios::ate);
@@ -231,28 +299,116 @@ static const std::string load_names[] = {
     "setter",
 };
 
+static bool is_client_auth_required() {
+  const char *C_client_auth = test_getenv("SSL_client_auth", "required");
+  std::string client_auth(C_client_auth);
+  return client_auth == "required";
+}
 
+/**
+ * @brief Test SSL certificate verification.
+ *
+ * @param line Test line number.
+ * @param verify_ok Expected verification result.
+ * @param untrusted_client_key Set up an untrusted client key.
+ * @param untrusted_client_key_intermediate_ca The untrusted client key is
+ *                                             signed by an intermediate CA.
+ * @param load_key How to load the client key.
+ * @param key_enc Encoding of the client key.
+ * @param load_pub How to load the client public key.
+ * @param pub_enc Encoding of the client public key.
+ * @param load_ca How to load the CA.
+ * @param ca_enc Encoding of the CA.
+ */
 static void do_test_verify(const int line,
                            bool verify_ok,
+                           bool untrusted_client_key,
+                           bool untrusted_client_key_intermediate_ca,
                            cert_load_t load_key,
                            RdKafka::CertificateEncoding key_enc,
                            cert_load_t load_pub,
                            RdKafka::CertificateEncoding pub_enc,
                            cert_load_t load_ca,
                            RdKafka::CertificateEncoding ca_enc) {
+#define TEST_FIXTURES_FOLDER       "./fixtures"
+#define TEST_FIXTURES_SSL_FOLDER   TEST_FIXTURES_FOLDER "/ssl/"
+#define TEST_FIXTURES_KEY_PASSWORD "use_strong_password_keystore_client2"
+
+/* Certificate directly signed by the root CA (untrusted) */
+#define TEST_CERTIFICATE_LOCATION                                              \
+  TEST_FIXTURES_SSL_FOLDER "client2.certificate.pem"
+#define TEST_KEY_LOCATION TEST_FIXTURES_SSL_FOLDER "client2.key"
+
+/* Certificate signed by an intermediate CA (untrusted) */
+#define TEST_CERTIFICATE_INTERMEDIATE_LOCATION                                 \
+  TEST_FIXTURES_SSL_FOLDER "client2.certificate.intermediate.pem"
+#define TEST_KEY_INTERMEDIATE_LOCATION                                         \
+  TEST_FIXTURES_SSL_FOLDER "client2.intermediate.key"
+
+  std::string errstr, existing_key_password;
   /*
    * Create any type of client
    */
-  std::string teststr = tostr() << line << ": "
-                                << "SSL cert verify: verify_ok=" << verify_ok
-                                << ", load_key=" << load_names[load_key]
-                                << ", load_pub=" << load_names[load_pub]
-                                << ", load_ca=" << load_names[load_ca];
+  std::string teststr =
+      tostr() << line << ": " << "SSL cert verify: verify_ok=" << verify_ok
+              << ", untrusted_client_key=" << untrusted_client_key
+              << ", untrusted_client_key_intermediate_ca="
+              << untrusted_client_key_intermediate_ca
+              << ", load_key=" << load_names[load_key]
+              << ", load_pub=" << load_names[load_pub]
+              << ", load_ca=" << load_names[load_ca];
 
   Test::Say(_C_BLU "[ " + teststr + " ]\n" _C_CLR);
 
   RdKafka::Conf *conf;
+  std::string security_protocol;
   Test::conf_init(&conf, NULL, 10);
+  if (conf->get("security.protocol", security_protocol) !=
+      RdKafka::Conf::CONF_OK)
+    Test::Fail("Failed to get security.protocol");
+  /* sasl_ssl endpoints don't require
+   * SSL authentication even when
+   * ssl.client.auth=required */
+  bool should_succeed =
+      verify_ok && (!untrusted_client_key || !is_client_auth_required() ||
+                    security_protocol != "ssl");
+  /* Broker rejects the client cert only when it's untrusted, client auth
+   * is required, and the endpoint is plain SSL. */
+  bool expect_client_auth_fail = verify_ok && untrusted_client_key &&
+                                 is_client_auth_required() &&
+                                 security_protocol == "ssl";
+  TestEventCb eventCb(should_succeed, expect_client_auth_fail);
+
+  if (conf->set("event_cb", &eventCb, errstr) != RdKafka::Conf::CONF_OK)
+    Test::Fail("Failed to set event_cb: " + errstr);
+
+  if (untrusted_client_key) {
+    /* Set an untrusted certificate, signed by a root CA or by an
+     * intermediate CA, and verify client authentication fails. */
+
+    const char *untrusted_key_location = untrusted_client_key_intermediate_ca
+                                             ? TEST_KEY_INTERMEDIATE_LOCATION
+                                             : TEST_KEY_LOCATION;
+    const char *untrusted_certificate_location =
+        untrusted_client_key_intermediate_ca
+            ? TEST_CERTIFICATE_INTERMEDIATE_LOCATION
+            : TEST_CERTIFICATE_LOCATION;
+
+    if (conf->set("ssl.key.location", untrusted_key_location, errstr) !=
+        RdKafka::Conf::CONF_OK)
+      Test::Fail("Failed to set untrusted ssl.key.location: " + errstr);
+
+    if (conf->get("ssl.key.password", existing_key_password) !=
+        RdKafka::Conf::CONF_OK)
+      Test::Fail("Failed to get existing ssl.key.password: " + errstr);
+    if (conf->set("ssl.key.password", TEST_FIXTURES_KEY_PASSWORD, errstr) !=
+        RdKafka::Conf::CONF_OK)
+      Test::Fail("Failed to set untrusted ssl.key.password: " + errstr);
+
+    if (conf->set("ssl.certificate.location", untrusted_certificate_location,
+                  errstr) != RdKafka::Conf::CONF_OK)
+      Test::Fail("Failed to set untrusted ssl.certificate.location: " + errstr);
+  }
 
   std::string val;
   if (conf->get("ssl.key.location", val) != RdKafka::Conf::CONF_OK ||
@@ -266,28 +422,35 @@ static void do_test_verify(const int line,
    * ssl.key.pem. Same with ssl.certificate.location -> ssl.certificate.pem. */
   if (load_key == USE_CONF)
     conf_location_to_pem(conf, "ssl.key.location", "ssl.key.pem",
-                         RdKafka::CERT_PRIVATE_KEY);
+                         RdKafka::CERT_PRIVATE_KEY, true);
   else if (load_key == USE_SETTER)
     conf_location_to_setter(conf, "ssl.key.location", RdKafka::CERT_PRIVATE_KEY,
-                            key_enc);
+                            key_enc, key_enc == RdKafka::CERT_ENC_PEM);
 
   if (load_pub == USE_CONF)
     conf_location_to_pem(conf, "ssl.certificate.location",
-                         "ssl.certificate.pem", RdKafka::CERT_PUBLIC_KEY);
+                         "ssl.certificate.pem", RdKafka::CERT_PUBLIC_KEY, true);
   else if (load_pub == USE_SETTER)
     conf_location_to_setter(conf, "ssl.certificate.location",
-                            RdKafka::CERT_PUBLIC_KEY, pub_enc);
+                            RdKafka::CERT_PUBLIC_KEY, pub_enc,
+                            pub_enc == RdKafka::CERT_ENC_PEM);
+
+  if (untrusted_client_key && ca_enc != RdKafka::CERT_ENC_PEM) {
+    /* Original password is needed for reading the
+     * CA certificate in the PKCS12 keystore. */
+    if (conf->set("ssl.key.password", existing_key_password, errstr) !=
+        RdKafka::Conf::CONF_OK)
+      Test::Fail("Failed to revert to existing ssl.key.password: " + errstr);
+  }
 
   if (load_ca == USE_CONF)
     conf_location_to_pem(conf, "ssl.ca.location", "ssl.ca.pem",
-                         RdKafka::CERT_CA);
+                         RdKafka::CERT_CA, true);
   else if (load_ca == USE_SETTER)
-    conf_location_to_setter(conf, "ssl.ca.location", RdKafka::CERT_CA, ca_enc);
+    conf_location_to_setter(conf, "ssl.ca.location", RdKafka::CERT_CA, ca_enc,
+                            ca_enc == RdKafka::CERT_ENC_PEM);
 
-
-  std::string errstr;
   conf->set("debug", "security", errstr);
-
   TestVerifyCb verifyCb(verify_ok);
   if (conf->set("ssl_cert_verify_cb", &verifyCb, errstr) !=
       RdKafka::Conf::CONF_OK)
@@ -318,9 +481,9 @@ static void do_test_verify(const int line,
    * this test. */
   std::string cluster = p->clusterid(1000);
 
-  if (verify_ok == cluster.empty())
+  if (should_succeed == cluster.empty())
     Test::Fail("Expected connection to " +
-               (std::string)(verify_ok ? "succeed" : "fail") +
+               (std::string)(should_succeed ? "succeed" : "fail") +
                ", but got clusterid '" + cluster + "'");
 
   delete p;
@@ -381,8 +544,155 @@ static void do_test_bad_calls() {
   Test::Say("Producer creation failed expectedly: " + errstr + "\n");
 }
 
+
+/* Self-signed certificate valid until 2126. Only ever parsed, never used
+ * for a handshake. */
+static const std::string valid_certificate_pem =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIDITCCAgmgAwIBAgIUbC4ibhU9bHAgjEcO7z3D34wrKlYwDQYJKoZIhvcNAQEL\n"
+    "BQAwHzEdMBsGA1UEAwwUbGlicmRrYWZrYS10ZXN0LTAwOTcwIBcNMjYwODA3MTIw\n"
+    "ODQ3WhgPMjEyNjA3MTQxMjA4NDdaMB8xHTAbBgNVBAMMFGxpYnJka2Fma2EtdGVz\n"
+    "dC0wMDk3MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnW50fTvi7yLy\n"
+    "lzvruQrD7qQsHfSRf7iD6Ihta9hkmXziLgbVMB9WSCOMOKQb9qLxxxolIl8cpC/j\n"
+    "QiOydK3UTimXkK4j4bVkNURa/EsQb+n3gqdxUHb9GlZOERTZNpZX3xvqXIcR4gF4\n"
+    "4SC9QcV88oMD3e0OlPH75JuiT41NbYNiBUIQ6hm/UD5l1yxuYotMTg5py16F5KxC\n"
+    "OA+QBvjXIy768R5nru0ZH+r0lbmlcvE0wojqFWcjyhHz/i0gT7lzjnoV30lsh5es\n"
+    "ksNorsZIAKYqGGSju36ckQm0ApD0DLWUwP1us2lCWcaF9fvOFlapnUwreAewrG8Z\n"
+    "5gh88Z5EgQIDAQABo1MwUTAdBgNVHQ4EFgQUrsO/5SSiOwxvquORFEBqhmVsRpcw\n"
+    "HwYDVR0jBBgwFoAUrsO/5SSiOwxvquORFEBqhmVsRpcwDwYDVR0TAQH/BAUwAwEB\n"
+    "/zANBgkqhkiG9w0BAQsFAAOCAQEAeNXkpmzf7ecN52c7ME8DTmpS6NUlMxSwRXJl\n"
+    "87KOAqOB/K/YfYlIdDMqpwqFb9axa498sIhGAtMjKFGr8YfajupUBjK3EUIGIgWm\n"
+    "aXErE7PQXwuGubtxgasFVYIsK8+w1zuUVgm76PJpfeHGmPDLJx2T0fNJbYgfmyPH\n"
+    "/L38xGpRLdP5mv4JJ/zM8R8MkJXbitwER0Xszzv0gaB/Xf/sg4oRLzQ85pku5ted\n"
+    "9hmclXmZyUOTJmrY7Sf9CQEgut89RDnpWlmRHzz6o4aHZt25j3Cm04aZ9oYEEgc9\n"
+    "bWnDPoD0X7geanPhHiJvbAEJpqQ2fUuZa8AwVcVQYIRX2tcZew==\n"
+    "-----END CERTIFICATE-----\n";
+
+/* A well-formed PEM block whose payload does not decode to an X.509
+ * certificate. */
+static const std::string malformed_certificate_pem =
+    "-----BEGIN CERTIFICATE-----\n"
+    "AAAA\n"
+    "-----END CERTIFICATE-----\n";
+
+
+/**
+ * @brief A trailing certificate block that can't be parsed makes the chain
+ *        unusable and is rejected. That rejection is intentional: the client
+ *        certificate chain is sent to the broker, so it can't be silently
+ *        truncated. The error must name the underlying OpenSSL reason
+ *        rather than "No further error information available".
+ */
+static void do_test_cert_pem_chain_error_reporting() {
+  SUB_TEST();
+
+  {
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    std::string errstr;
+
+    if (conf->set("security.protocol", "SSL", errstr))
+      Test::Fail(errstr);
+    if (conf->set("ssl.certificate.pem", valid_certificate_pem, errstr))
+      Test::Fail(errstr);
+
+    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+    delete conf;
+    if (!producer)
+      Test::Fail(
+          "Expected producer creation to succeed with a valid "
+          "ssl.certificate.pem, got: " +
+          errstr);
+    Test::Say("Valid ssl.certificate.pem accepted (as expected)\n");
+    delete producer;
+  }
+
+  {
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    std::string errstr;
+
+    if (conf->set("security.protocol", "SSL", errstr))
+      Test::Fail(errstr);
+    if (conf->set("ssl.certificate.pem",
+                  valid_certificate_pem + malformed_certificate_pem, errstr))
+      Test::Fail(errstr);
+
+    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+    delete conf;
+    if (producer) {
+      delete producer;
+      Test::Fail(
+          "Expected producer creation to fail with a malformed "
+          "certificate chain in ssl.certificate.pem");
+    }
+
+    Test::Say("Malformed certificate chain rejected (as expected): " + errstr +
+              "\n");
+
+    if (errstr.find("No further error information available") !=
+        std::string::npos)
+      Test::Fail("Expected the underlying OpenSSL error to be reported, not: " +
+                 errstr);
+
+    if (errstr.find("error reading certificate chain") == std::string::npos)
+      Test::Fail(
+          "Expected the error to identify the certificate chain as the "
+          "failing part, not: " +
+          errstr);
+
+    /* The error text differs between OpenSSL versions, only its
+     * "error:<code>:<lib>:..." prefix is checked. */
+    if (errstr.find("error:") == std::string::npos)
+      Test::Fail("Expected an OpenSSL error string in: " + errstr);
+  }
+
+  /* Same input through the setter API, which uses a different error path. */
+  {
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    std::string errstr;
+    std::string pem = valid_certificate_pem + malformed_certificate_pem;
+
+    if (conf->set_ssl_cert(RdKafka::CERT_PUBLIC_KEY, RdKafka::CERT_ENC_PEM,
+                           (void *)pem.data(), pem.size(),
+                           errstr) == RdKafka::Conf::CONF_OK)
+      Test::Fail(
+          "Expected set_ssl_cert() to fail with a malformed "
+          "certificate chain");
+
+    Test::Say("set_ssl_cert() rejected malformed chain (as expected): " +
+              errstr + "\n");
+
+    /* This path appends the reason after ": ", so an empty reason leaves
+     * the message ending in ": ". */
+    if (errstr.size() < 2 || errstr.compare(errstr.size() - 2, 2, ": ") == 0)
+      Test::Fail("Expected an OpenSSL error to be appended to: " + errstr);
+
+    delete conf;
+  }
+
+  SUB_TEST_PASS();
+}
+
+}  // namespace TestSSLVerify
+
+using namespace TestSSLVerify;
+
 extern "C" {
+
+/**
+ * @brief Test SSL certificate verification with various
+ *        key types and trusted or untrusted client certificates.
+ *
+ * @remark This tests can be run with a root CA signed certificate
+ *         when trivup is started with "--ssl" only,
+ *         or with an intermediate CA signed certificate,
+ *         when trivup is started with:
+ *         --conf='{"ssl_intermediate_ca": true}'
+ *         or with "ssl.client.auth=requested" when started with:
+ *         --conf='{"ssl_client_auth": "requested"}'
+ *         or a combination of both.
+ */
 int main_0097_ssl_verify(int argc, char **argv) {
+  int untrusted_client_key, untrusted_client_key_intermediate_ca;
   if (!test_check_builtin("ssl")) {
     Test::Skip("Test requires SSL support\n");
     return 0;
@@ -396,32 +706,58 @@ int main_0097_ssl_verify(int argc, char **argv) {
 
   do_test_bad_calls();
 
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_LOCATION, RdKafka::CERT_ENC_PEM, USE_LOCATION,
-                 RdKafka::CERT_ENC_PEM);
-  do_test_verify(__LINE__, false, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_LOCATION, RdKafka::CERT_ENC_PEM, USE_LOCATION,
-                 RdKafka::CERT_ENC_PEM);
+  for (untrusted_client_key = 0; untrusted_client_key <= 1;
+       untrusted_client_key++) {
+    for (untrusted_client_key_intermediate_ca = 0;
+         untrusted_client_key_intermediate_ca <= untrusted_client_key;
+         untrusted_client_key_intermediate_ca++) {
+      do_test_verify(__LINE__, true /*verify ok*/, untrusted_client_key,
+                     untrusted_client_key_intermediate_ca, USE_LOCATION,
+                     RdKafka::CERT_ENC_PEM, USE_LOCATION, RdKafka::CERT_ENC_PEM,
+                     USE_LOCATION, RdKafka::CERT_ENC_PEM);
+      do_test_verify(__LINE__, false /*verify not ok*/, untrusted_client_key,
+                     untrusted_client_key_intermediate_ca, USE_LOCATION,
+                     RdKafka::CERT_ENC_PEM, USE_LOCATION, RdKafka::CERT_ENC_PEM,
+                     USE_LOCATION, RdKafka::CERT_ENC_PEM);
 
-  /* Verify various priv and pub key and CA input formats */
-  do_test_verify(__LINE__, true, USE_CONF, RdKafka::CERT_ENC_PEM, USE_CONF,
-                 RdKafka::CERT_ENC_PEM, USE_LOCATION, RdKafka::CERT_ENC_PEM);
-  do_test_verify(__LINE__, true, USE_CONF, RdKafka::CERT_ENC_PEM, USE_CONF,
-                 RdKafka::CERT_ENC_PEM, USE_CONF, RdKafka::CERT_ENC_PEM);
-  do_test_verify(__LINE__, true, USE_SETTER, RdKafka::CERT_ENC_PEM, USE_SETTER,
-                 RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_PKCS12);
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_SETTER, RdKafka::CERT_ENC_DER, USE_SETTER,
-                 RdKafka::CERT_ENC_DER);
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_SETTER, RdKafka::CERT_ENC_DER, USE_SETTER,
-                 RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
-  do_test_verify(__LINE__, true, USE_LOCATION, RdKafka::CERT_ENC_PEM,
-                 USE_SETTER, RdKafka::CERT_ENC_DER, USE_CONF,
-                 RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
-  do_test_verify(__LINE__, true, USE_SETTER, RdKafka::CERT_ENC_PKCS12,
-                 USE_SETTER, RdKafka::CERT_ENC_PKCS12, USE_SETTER,
-                 RdKafka::CERT_ENC_PKCS12);
+      /* Verify various priv and pub key and CA input formats */
+      do_test_verify(__LINE__, true /*verify ok*/, untrusted_client_key,
+                     untrusted_client_key_intermediate_ca, USE_CONF,
+                     RdKafka::CERT_ENC_PEM, USE_CONF, RdKafka::CERT_ENC_PEM,
+                     USE_LOCATION, RdKafka::CERT_ENC_PEM);
+      do_test_verify(__LINE__, true /*verify ok*/, untrusted_client_key,
+                     untrusted_client_key_intermediate_ca, USE_CONF,
+                     RdKafka::CERT_ENC_PEM, USE_CONF, RdKafka::CERT_ENC_PEM,
+                     USE_CONF, RdKafka::CERT_ENC_PEM);
+      do_test_verify(__LINE__, true /*verify ok*/, untrusted_client_key,
+                     untrusted_client_key_intermediate_ca, USE_SETTER,
+                     RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_PEM,
+                     USE_SETTER, RdKafka::CERT_ENC_PKCS12);
+    }
+  }
+
+  if (test_getenv("SSL_intermediate_pub_pem", NULL) == NULL) {
+    Test::Say("Running root CA only tests\n");
+    /* DER format can contain only a single certificate so it's
+     * not suited for sending the complete chain of trust
+     * corresponding to the private key,
+     * that is necessary when using an intermediate CA. */
+    do_test_verify(__LINE__, true /*verify ok*/, false, false, USE_LOCATION,
+                   RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_DER,
+                   USE_SETTER, RdKafka::CERT_ENC_DER);
+    do_test_verify(__LINE__, true /*verify ok*/, false, false, USE_LOCATION,
+                   RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_DER,
+                   USE_SETTER,
+                   RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
+    do_test_verify(__LINE__, true /*verify ok*/, false, false, USE_LOCATION,
+                   RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_DER,
+                   USE_CONF, RdKafka::CERT_ENC_PEM); /* env: SSL_all_cas_pem */
+    Test::Say("Finished running root CA only tests\n");
+  }
+
+  do_test_verify(__LINE__, true /*verify ok*/, false, false, USE_SETTER,
+                 RdKafka::CERT_ENC_PKCS12, USE_SETTER, RdKafka::CERT_ENC_PKCS12,
+                 USE_SETTER, RdKafka::CERT_ENC_PKCS12);
 
   return 0;
 }
@@ -460,6 +796,8 @@ int main_0097_ssl_verify_local(int argc, char **argv) {
       Test::Say("Failed to create producer with junk " + props[i] +
                 " (as expected): " + errstr + "\n");
   }
+
+  do_test_cert_pem_chain_error_reporting();
 
   return 0;
 }

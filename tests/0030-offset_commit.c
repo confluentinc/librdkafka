@@ -429,7 +429,7 @@ static void do_empty_commit(void) {
         TEST_SAY("First commit\n");
         expect = RD_KAFKA_RESP_ERR_NO_ERROR;
         err    = rd_kafka_commit_queue(rk, NULL, NULL, empty_offset_commit_cb,
-                                    &expect);
+                                       &expect);
         if (err != expect)
                 TEST_FAIL("commit failed: %s", rd_kafka_err2str(err));
         else
@@ -438,7 +438,7 @@ static void do_empty_commit(void) {
         TEST_SAY("Second commit, should be empty\n");
         expect = RD_KAFKA_RESP_ERR__NO_OFFSET;
         err    = rd_kafka_commit_queue(rk, NULL, NULL, empty_offset_commit_cb,
-                                    &expect);
+                                       &expect);
         if (err != RD_KAFKA_RESP_ERR__NO_OFFSET)
                 TEST_FAIL("unexpected commit result, wanted NO_OFFSET, got: %s",
                           rd_kafka_err2str(err));

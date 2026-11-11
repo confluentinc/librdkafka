@@ -9,6 +9,11 @@ Begin with the following examples:
  * [consumer.c](consumer.c) - a typical C high-level consumer application.
  * [producer.c](producer.c) - a typical C producer application.
  * [producer.cpp](producer.cpp) - a typical C++ producer application.
+ * [producer_schema_registry.cpp](producer_schema_registry.cpp) - producer using
+                                      Schema Registry, via libschemaregistry and
+                                      avro-cpp. Not built by `make`; see the
+                                      file header for its extra build
+                                      dependencies.
  * [idempotent_producer.c](idempotent_producer.c) - Idempotent producer.
  * [transactions.c](transactions.c) - Full exactly once semantics (EOS)
                                       transactional consumer-producer exammple.
@@ -17,6 +22,12 @@ Begin with the following examples:
    `transactions.c` but for Apache Kafka versions 2.4.x and older which
    lack KIP-447 support.
  * [misc.c](misc.c) - a collection of miscellaneous usage examples.
+
+
+For the share consumer (Queues for Kafka, [KIP-932](../INTRODUCTION.md#share-consumers-queues-for-kafka), **Preview**), see:
+ * [share_consumer.c](share_consumer.c) - a basic share consumer (poll + acknowledge).
+ * [share_consumer_commit_sync.c](share_consumer_commit_sync.c) - share consumer with explicit acknowledgement and synchronous commit.
+ * [share_consumer_commit_async.c](share_consumer_commit_async.c) - share consumer with explicit acknowledgement and asynchronous commit.
 
 
 For more complex uses, see:
@@ -34,6 +45,8 @@ For more complex uses, see:
  * [delete_records.c](delete_records.c) - Delete records.
  * [list_consumer_groups.c](list_consumer_groups.c) - List consumer groups.
  * [describe_consumer_groups.c](describe_consumer_groups.c) - Describe consumer groups.
+ * [describe_topics.c](describe_topics.c) - Describe topics.
+ * [describe_cluster.c](describe_cluster.c) - Describe cluster.
  * [list_consumer_group_offsets.c](list_consumer_group_offsets.c) - List offsets of a consumer group.
  * [alter_consumer_group_offsets.c](alter_consumer_group_offsets.c) - Alter offsets of a consumer group.
  * [incremental_alter_configs.c](incremental_alter_configs.c) - Incrementally alter resource configurations.

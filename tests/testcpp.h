@@ -132,6 +132,21 @@ static RD_UNUSED void create_topic(RdKafka::Handle *use_handle,
 }
 
 /**
+ * @brief Create a topic and wait for it to be available in metadata.
+ */
+static RD_UNUSED void create_topic_wait_exists(RdKafka::Handle *use_handle,
+                                               const char *topicname,
+                                               int partition_cnt,
+                                               int replication_factor,
+                                               int timeout) {
+  rd_kafka_t *use_rk = NULL;
+  if (use_handle != NULL)
+    use_rk = use_handle->c_ptr();
+  test_create_topic_wait_exists(use_rk, topicname, partition_cnt,
+                                replication_factor, timeout);
+}
+
+/**
  * @brief Delete a topic
  */
 static RD_UNUSED void delete_topic(RdKafka::Handle *use_handle,
@@ -140,6 +155,14 @@ static RD_UNUSED void delete_topic(RdKafka::Handle *use_handle,
   if (use_handle != NULL)
     use_rk = use_handle->c_ptr();
   test_delete_topic(use_rk, topicname);
+}
+
+/**
+ * @brief
+ */
+static RD_UNUSED bool is_forbidden_conf_group_protocol_consumer(
+    const std::string &name) {
+  return test_is_forbidden_conf_group_protocol_consumer(name.c_str());
 }
 
 /**
@@ -152,6 +175,11 @@ static RD_UNUSED void conf_set(RdKafka::Conf *conf,
                                std::string name,
                                std::string val) {
   std::string errstr;
+  if (Test::is_forbidden_conf_group_protocol_consumer(name)) {
+    Test::Say(tostr() << "Skipping setting forbidden configuration " << name
+                      << " for CONSUMER protocol.\n");
+    return;
+  }
   if (conf->set(name, val, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Conf failed: " + errstr);
 }
@@ -163,8 +191,8 @@ static RD_UNUSED void print_TopicPartitions(
                     << " TopicPartition(s):\n");
   for (unsigned int i = 0; i < partitions.size(); i++)
     Test::Say(tostr() << " " << partitions[i]->topic() << "["
-                      << partitions[i]->partition() << "] "
-                      << "offset " << partitions[i]->offset() << ": "
+                      << partitions[i]->partition() << "] " << "offset "
+                      << partitions[i]->offset() << ": "
                       << RdKafka::err2str(partitions[i]->err()) << "\n");
 }
 

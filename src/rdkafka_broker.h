@@ -51,7 +51,6 @@ typedef enum {
         /* Any state >= STATE_UP means the Kafka protocol layer
          * is operational (to some degree). */
         RD_KAFKA_BROKER_STATE_UP,
-        RD_KAFKA_BROKER_STATE_UPDATE,
         RD_KAFKA_BROKER_STATE_APIVERSION_QUERY,
         RD_KAFKA_BROKER_STATE_AUTH_HANDSHAKE,
         RD_KAFKA_BROKER_STATE_AUTH_REQ,
@@ -82,8 +81,7 @@ typedef struct rd_kafka_broker_monitor_s {
 struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         TAILQ_ENTRY(rd_kafka_broker_s) rkb_link;
 
-        int32_t rkb_nodeid; /**< Broker Node Id.
-                             *   @locks rkb_lock */
+        int32_t rkb_nodeid; /**< Broker Node Id, read only. */
 #define RD_KAFKA_NODEID_UA -1
 
         rd_sockaddr_list_t *rkb_rsal;
@@ -108,6 +106,61 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         /* Toppars handled by this broker */
         TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
+
+        /**
+         * TODO KIP-932: Consider using a map instead of rd_list_t for
+         *               some of the partition lists to optimize
+         *               add/remove performance.
+         */
+        struct {
+                rd_list_t *toppars_in_session; /* List of toppars in the current
+                                                * fetch session. Any new added
+                                                * toppar in rkb_toppars will be
+                                                * added here after successful
+                                                * share fetch request. Any
+                                                * removed toppar from
+                                                * rkb_toppars will be removed
+                                                * from here after successful
+                                                * share fetch request. */
+                rd_list_t
+                    *toppars_to_add; /* TODO KIP-932: Consider using a map
+                                      * for performance improvements. List
+                                      * of toppars that are to be added to
+                                      * the fetch session. `adding_toppars`
+                                      * are removed from this when fetch
+                                      * request is successful. */
+
+                rd_list_t
+                    *adding_toppars; /* List of toppars that are being added to
+                                      * the session. These are already sent in
+                                      * the fetch request. Will be removed from
+                                      * `toppars_to_add` when fetch request is
+                                      * successful. This is cleared and set to
+                                      * NULL after the response.
+                                      */
+
+                rd_list_t
+                    *toppars_to_forget; /* TODO KIP-932: Consider using a map
+                                         * for performance improvements. List
+                                         * of toppars that are removed from
+                                         * the session. `forgetting_toppars`
+                                         * are removed from this when fetch
+                                         * request is successful. */
+
+                rd_list_t *forgetting_toppars; /* List of toppars that are being
+                                                * removed from the session.
+                                                * These are already sent in the
+                                                * fetch request. Will be removed
+                                                * from `toppars_to_forget` when
+                                                * fetch request is successful.
+                                                * This is cleared and set to
+                                                * NULL after the response.
+                                                */
+                int32_t epoch;                 /* Current fetch session
+                                                * epoch, or -1 if leaving the session
+                                                */
+        } rkb_share_fetch_session;
+
         int rkb_toppar_cnt;
 
         /* Active toppars that are eligible for:
@@ -189,9 +242,77 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                 rd_atomic64_t reqtype[RD_KAFKAP__NUM]; /**< Per request-type
                                                         *   counter */
 
-                rd_atomic64_t ts_send; /**< Timestamp of last send */
-                rd_atomic64_t ts_recv; /**< Timestamp of last receive */
+                rd_atomic64_t ts_send;       /**< Timestamp of last send */
+                rd_atomic64_t ts_recv;       /**< Timestamp of last receive */
+                rd_bool_t skip_broker_down;  /**< Avoid reporting the
+                                              *   broker down on next
+                                              *   state change.
+                                              *   Useful for a planned
+                                              *   disconnection to avoid
+                                              *   reaching the all
+                                              *   brokers down state. */
+                int connections_max_idle_ms; /**< Maximum idle time
+                                              *   for this broker connections.
+                                              *   jitter is different for
+                                              *   each broker to avoid the
+                                              *   ALL_BROKERS_DOWN error.
+                                              *   Initial value is `-1` as
+                                              *   `connections.max.idle.ms=0`
+                                              *   means disabled, but must
+                                              *   never be used when
+                                              *   `connections.max.idle.ms=0`
+                                              *   for the same reason
+                                              *   (an assert is present). */
         } rkb_c;
+
+        struct {
+                struct {
+                        int32_t connects; /**< Connection attempts,
+                                           *   successful or not. */
+                } rkb_historic_c;
+
+                struct {
+                        rd_avg_t rkb_avg_rtt;      /* Current RTT avg */
+                        rd_avg_t rkb_avg_throttle; /* Current throttle avg */
+                        rd_avg_t
+                            rkb_avg_outbuf_latency;     /**< Current latency
+                                                         *   between buf_enq0
+                                                         *   and writing to socket
+                                                         */
+                        rd_avg_t rkb_avg_fetch_latency; /**< Current fetch
+                                                         *   latency avg */
+                        rd_avg_t rkb_avg_share_fetch_latency; /**< Current share
+                                                               *   fetch latency
+                                                               *   avg */
+                        rd_avg_t rkb_avg_share_fetch_size;    /**< Current share
+                                                               *   fetch response
+                                                               *   size avg
+                                                               *   (bytes) */
+                        rd_avg_t rkb_avg_produce_latency; /**< Current produce
+                                                           *   latency avg */
+                } rd_avg_current;
+
+                struct {
+                        rd_avg_t rkb_avg_rtt; /**< Rolled over RTT avg */
+                        rd_avg_t
+                            rkb_avg_throttle; /**< Rolled over throttle avg */
+                        rd_avg_t rkb_avg_outbuf_latency; /**< Rolled over outbuf
+                                                          *   latency avg */
+                        rd_avg_t rkb_avg_fetch_latency;  /**< Rolled over fetch
+                                                          *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_latency; /**< Rolled over
+                                                          *   share fetch
+                                                          *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_size; /**< Rolled over
+                                                       *   share fetch response
+                                                       *   size avg (bytes) */
+                        rd_avg_t
+                            rkb_avg_produce_latency; /**< Rolled over produce
+                                                      *   latency avg */
+                } rd_avg_rollover;
+        } rkb_telemetry;
 
         int rkb_req_timeouts; /* Current value */
 
@@ -299,7 +420,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         rd_kafka_secproto_t rkb_proto;
 
-        int rkb_down_reported; /* Down event reported */
+        /** Down event was reported for this broker
+         *  after last connection to any broker. */
+        rd_atomic32_t rkb_down_reported;
 #if WITH_SASL_CYRUS
         rd_kafka_timer_t rkb_sasl_kinit_refresh_tmr;
 #endif
@@ -331,6 +454,46 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
 
         rd_kafka_timer_t rkb_sasl_reauth_tmr;
+
+        /** > 0 if this broker thread is terminating */
+        rd_atomic32_t termination_in_progress;
+
+        /**
+         * Whether a share fetch should_fetch set is enqueued on
+         * this broker's op queue or not.
+         */
+        rd_bool_t rkb_share_fetch_enqueued;
+
+        rd_list_t
+            *rkb_share_async_ack_details; /**< Pending ack batches for
+                                           *   this broker (as partition
+                                           *   leader). Type:
+                                           *   rd_kafka_share_ack_batches_t*.
+                                           *   Allocated by main thread
+                                           *   FANOUT handler, moved to
+                                           *   SHARE_FETCH op and set to
+                                           *   NULL. Freed by broker
+                                           *   thread after use.
+                                           *   @locality main thread */
+
+        /**
+         * Pending commit_sync ack details for this broker.
+         * Stored when a commit_sync request arrives but the broker
+         * already has an inflight request. Takes priority over
+         * rkb_share_async_ack_details when dispatching.
+         * @locality main thread
+         */
+        struct {
+                rd_list_t *sync_ack_details;    /**< Ack batches waiting to be
+                                                 *   sent. Type:
+                                                 *   rd_kafka_share_ack_batches_t*.
+                                                 */
+                rd_ts_t abs_timeout;            /**< Absolute timeout from
+                                                 *   the commit_sync request. */
+                int64_t commit_sync_request_id; /**< Request ID this
+                                                 *   pending data
+                                                 *   belongs to. */
+        } rkb_pending_commit_sync;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)
@@ -358,12 +521,28 @@ rd_kafka_broker_get_state(rd_kafka_broker_t *rkb) {
 
 
 /**
- * @returns true if the broker state is UP or UPDATE
+ * @returns true if the broker state is UP
  */
-#define rd_kafka_broker_state_is_up(state)                                     \
-        ((state) == RD_KAFKA_BROKER_STATE_UP ||                                \
-         (state) == RD_KAFKA_BROKER_STATE_UPDATE)
+#define rd_kafka_broker_state_is_up(state) ((state) == RD_KAFKA_BROKER_STATE_UP)
 
+/**
+ * @returns true if the broker state is DOWN
+ */
+#define rd_kafka_broker_state_is_down(state)                                   \
+        ((state) == RD_KAFKA_BROKER_STATE_DOWN)
+
+/**
+ * @returns true if the error is a broker destroy error, because of
+ *          termination or because of decommissioning.
+ */
+#define rd_kafka_broker_is_any_err_destroy(err)                                \
+        ((err) == RD_KAFKA_RESP_ERR__DESTROY ||                                \
+         (err) == RD_KAFKA_RESP_ERR__DESTROY_BROKER)
+
+
+#define rd_kafka_broker_or_instance_terminating(rkb)                           \
+        (rd_kafka_broker_termination_in_progress(rkb) ||                       \
+         rd_kafka_terminating((rkb)->rkb_rk))
 
 /**
  * @returns true if the broker connection is up, else false.
@@ -376,6 +555,14 @@ rd_kafka_broker_is_up(rd_kafka_broker_t *rkb) {
         return rd_kafka_broker_state_is_up(state);
 }
 
+/**
+ * @returns true if the broker needs a persistent connection
+ * @locality any
+ */
+static RD_UNUSED RD_INLINE rd_bool_t
+rd_kafka_broker_termination_in_progress(rd_kafka_broker_t *rkb) {
+        return rd_atomic32_get(&rkb->termination_in_progress) > 0;
+}
 
 /**
  * @brief Broker comparator
@@ -410,6 +597,21 @@ int16_t rd_kafka_broker_ApiVersion_supported(rd_kafka_broker_t *rkb,
                                              int16_t minver,
                                              int16_t maxver,
                                              int *featuresp);
+
+int16_t rd_kafka_broker_ApiVersion_supported0(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver,
+                                              int16_t maxver,
+                                              int *featuresp,
+                                              rd_bool_t do_lock);
+
+rd_bool_t rd_kafka_broker_ApiVersion_at_least(rd_kafka_broker_t *rkb,
+                                              int16_t ApiKey,
+                                              int16_t minver);
+
+rd_bool_t rd_kafka_broker_ApiVersion_at_least_no_lock(rd_kafka_broker_t *rkb,
+                                                      int16_t ApiKey,
+                                                      int16_t minver);
 
 rd_kafka_broker_t *rd_kafka_broker_find_by_nodeid0_fl(const char *func,
                                                       int line,
@@ -511,15 +713,23 @@ rd_kafka_broker_t *rd_kafka_broker_add_logical(rd_kafka_t *rk,
 void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
                                   rd_kafka_broker_t *from_rkb);
 
+void rd_kafka_nodename_to_hostname(const char *nodename,
+                                   char *dest,
+                                   size_t dsize);
+
 void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb);
 void rd_kafka_broker_connect_done(rd_kafka_broker_t *rkb, const char *errstr);
 
 int rd_kafka_send(rd_kafka_broker_t *rkb);
 int rd_kafka_recv(rd_kafka_broker_t *rkb);
 
-void rd_kafka_dr_msgq(rd_kafka_topic_t *rkt,
-                      rd_kafka_msgq_t *rkmq,
-                      rd_kafka_resp_err_t err);
+#define rd_kafka_dr_msgq(rkt, rkmq, err)                                       \
+        rd_kafka_dr_msgq0(rkt, rkmq, err, NULL /*no produce result*/)
+
+void rd_kafka_dr_msgq0(rd_kafka_topic_t *rkt,
+                       rd_kafka_msgq_t *rkmq,
+                       rd_kafka_resp_err_t err,
+                       const rd_kafka_Produce_result_t *presult);
 
 void rd_kafka_dr_implicit_ack(rd_kafka_broker_t *rkb,
                               rd_kafka_toppar_t *rktp,
@@ -567,6 +777,25 @@ int rd_kafka_brokers_wait_state_change_async(rd_kafka_t *rk,
                                              int stored_version,
                                              rd_kafka_enq_once_t *eonce);
 void rd_kafka_brokers_broadcast_state_change(rd_kafka_t *rk);
+
+rd_kafka_broker_t *rd_kafka_broker_random0(const char *func,
+                                           int line,
+                                           rd_kafka_t *rk,
+                                           rd_bool_t is_up,
+                                           int state,
+                                           int *filtered_cnt,
+                                           int (*filter)(rd_kafka_broker_t *rk,
+                                                         void *opaque),
+                                           void *opaque);
+
+#define rd_kafka_broker_random(rk, state, filter, opaque)                      \
+        rd_kafka_broker_random0(__FUNCTION__, __LINE__, rk, rd_false, state,   \
+                                NULL, filter, opaque)
+
+#define rd_kafka_broker_random_up(rk, filter, opaque)                          \
+        rd_kafka_broker_random0(__FUNCTION__, __LINE__, rk, rd_true,           \
+                                RD_KAFKA_BROKER_STATE_UP, NULL, filter,        \
+                                opaque)
 
 
 
@@ -616,6 +845,15 @@ void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
                                         int64_t connections_max_reauth_ms);
 
 void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *rkb);
+
+void rd_kafka_broker_decommission(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb,
+                                  rd_list_t *wait_thrds);
+
+void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers);
+
+void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
+                                               const char *reason);
 
 int unittest_broker(void);
 

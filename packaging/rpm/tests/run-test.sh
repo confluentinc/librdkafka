@@ -16,18 +16,11 @@ _IMG=$1
 
 echo "Testing on $_IMG"
 
-if [[ $_IMG == "centos:6" ]]; then
-    _EL=6
-    _INST="yum install -y -q"
-elif [[ $_IMG == "centos:7" ]]; then
-    _EL=7
-    _INST="yum install -y -q"
-    # centos:7 ships with openssl-libs 1.0.1 which is outdated and not
-    # ABI-compatible with 1.0.2 (which we build with).
-    # Upgrade openssl-libs, as users would, to prevent missing symbols.
-    _UPG="yum upgrade -y openssl-libs"
-else
+if [[ $_IMG == "rockylinux:8" ]]; then
     _EL=8
+    _INST="dnf install -y -q"
+else
+    _EL=9
     _INST="dnf install -y -q"
 fi
 

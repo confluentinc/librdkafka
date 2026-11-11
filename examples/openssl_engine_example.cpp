@@ -74,10 +74,9 @@ class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
                           const char *buf,
                           size_t size,
                           std::string &errstr) {
-    std::cout << "ssl_cert_verify_cb :"
-              << ": broker_name=" << broker_name << ", broker_id=" << broker_id
-              << ", x509_error=" << *x509_error << ", depth=" << depth
-              << ", buf size=" << size << std::endl;
+    std::cout << "ssl_cert_verify_cb :" << ": broker_name=" << broker_name
+              << ", broker_id=" << broker_id << ", x509_error=" << *x509_error
+              << ", depth=" << depth << ", buf size=" << size << std::endl;
 
     return true;
   }

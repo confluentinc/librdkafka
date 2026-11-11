@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,7 +56,7 @@ static void rebalance_cb(rd_kafka_t *rk,
             rd_kafka_err2name(rebalance_exp_event), rd_kafka_err2name(err));
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                test_consumer_assign("assign", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("assign", rk, parts);
         } else {
                 rd_kafka_resp_err_t commit_err;
 
@@ -92,8 +93,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                                     rd_kafka_err2name(commit_exp_err),
                                     rd_kafka_err2name(commit_err));
                 }
-
-                test_consumer_unassign("unassign", rk);
+                test_consumer_unassign_by_rebalance_protocol("unassign", rk,
+                                                             parts);
         }
 
         /* Make sure only one rebalance callback is served per poll()
@@ -169,27 +170,38 @@ static void do_test_session_timeout(const char *use_commit_type) {
         test_conf_set(conf, "auto.offset.reset", "earliest");
         test_conf_set(conf, "enable.auto.commit",
                       !strcmp(commit_type, "auto") ? "true" : "false");
+        rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster, 1000);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 100);
 
         c = test_create_consumer(groupid, rebalance_cb, conf, NULL);
 
         test_consumer_subscribe(c, topic);
 
-        /* Let Heartbeats fail after a couple of successful ones */
-        rd_kafka_mock_push_request_errors(
-            mcluster, RD_KAFKAP_Heartbeat, 9, RD_KAFKA_RESP_ERR_NO_ERROR,
-            RD_KAFKA_RESP_ERR_NO_ERROR, RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
-            RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
+        if (test_consumer_group_protocol_classic()) {
+                /* Let Heartbeats fail after a couple of successful ones */
+                rd_kafka_mock_push_request_errors(
+                    mcluster, RD_KAFKAP_Heartbeat, 9,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, RD_KAFKA_RESP_ERR_NO_ERROR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+                    RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
+        }
 
         expect_rebalance("initial assignment", c,
                          RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS, 5 + 2);
 
         /* Consume a couple of messages so that we have something to commit */
         test_consumer_poll("consume", c, 0, -1, 0, 10, NULL);
+
+        if (!test_consumer_group_protocol_classic()) {
+                /* Increase HB interval so member is fenced from the group */
+                rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster,
+                                                                       2000);
+        }
 
         /* The commit in the rebalance callback should fail when the
          * member has timed out from the group. */
@@ -285,16 +297,22 @@ static void do_test_commit_on_lost(void) {
 
 int main_0106_cgrp_sess_timeout(int argc, char **argv) {
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_session_timeout("sync");
         do_test_session_timeout("async");
         do_test_session_timeout("auto");
 
-        do_test_commit_on_lost();
+        /* With KIP-848 session timeout is remote only.
+         * Partitions will stay assigned and fetchable
+         * when there's no communication with the
+         * coordinator, but the messages won't be
+         * committed.
+         * TODO: see if session timeout can be received by
+         * the broker and be enforced locally too. */
+        if (test_consumer_group_protocol_classic()) {
+                do_test_commit_on_lost();
+        }
 
         return 0;
 }

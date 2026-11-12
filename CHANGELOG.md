@@ -1,5 +1,12 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Enhancements
+
+ * Compute CRC-32C with the ARMv8 CRC32 instructions on little-endian AArch64,
+   selected at build time or, on Linux, at runtime from `HWCAP_CRC32`
+   (@atsarevskiy, #5637).
+
+
 ## Fixes
 
 ### Admin fixes

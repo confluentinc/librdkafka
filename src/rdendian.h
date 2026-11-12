@@ -136,6 +136,10 @@
          (((x) & 0x0000ff0000000000L) >> 24) |                                 \
          (((x) & 0x00ff000000000000L) >> 40) |                                 \
          (((x) & 0xff00000000000000L) >> 56))
+
+#elif __QNXNTO__
+#include <net/netbyte.h>
+
 #else
 #include <endian.h>
 #endif

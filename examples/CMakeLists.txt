@@ -38,6 +38,9 @@ target_link_libraries(delete_records PUBLIC rdkafka)
 add_executable(list_consumer_groups list_consumer_groups.c ${win32_sources})
 target_link_libraries(list_consumer_groups PUBLIC rdkafka)
 
+add_executable(list_groups list_groups.c ${win32_sources})
+target_link_libraries(list_groups PUBLIC rdkafka)
+
 add_executable(describe_consumer_groups describe_consumer_groups.c ${win32_sources})
 target_link_libraries(describe_consumer_groups PUBLIC rdkafka)
 

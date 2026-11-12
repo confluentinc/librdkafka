@@ -220,6 +220,9 @@ typedef enum {
         RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
                                             to clear share session during broker
                                             decommission */
+        RD_KAFKA_OP_LISTGROUPS,          /**< Admin:
+                                          *   ListGroups
+                                          *   u.admin_request */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

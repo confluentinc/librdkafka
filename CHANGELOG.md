@@ -19,6 +19,21 @@
   failed allocation can never leave a non-zero count beside a `NULL`
   pointer (#5580, @shoemoney).
 
+* Fix an integer overflow in the exponential backoff between retries of a
+  produced message: from its 26th retry (with the default
+  `retry.backoff.ms`) the backoff could become negative or too short, so the
+  message was retried immediately instead of after `retry.backoff.max.ms`
+  (#5646).
+
+### Consumer fixes
+
+* Fix an integer overflow in the exponential backoff between heartbeat
+  retries of the KIP-848 `consumer` group protocol and of share consumers:
+  from the 32nd consecutive heartbeat without a successful response the
+  backoff could become negative or restart from 1ms, so heartbeats were sent
+  immediately or in quick bursts instead of after `retry.backoff.max.ms`.
+  Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
+
 
 # librdkafka v2.16.0
 

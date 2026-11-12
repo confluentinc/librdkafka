@@ -973,8 +973,8 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
         rd_kafka_msgq_t retryable = RD_KAFKA_MSGQ_INITIALIZER(retryable);
         rd_kafka_msg_t *rkm, *tmp;
         rd_ts_t now;
-        int64_t jitter = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
-                                   100 + RD_KAFKA_RETRY_JITTER_PERCENT);
+        int jitter = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                               100 + RD_KAFKA_RETRY_JITTER_PERCENT);
         /* Scan through messages to see which ones are eligible for retry,
          * move the retryable ones to temporary queue and
          * set backoff time for first message and optionally
@@ -1000,18 +1000,9 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         /* In some cases, like failed Produce requests do not
                          * increment the retry count, see
                          * rd_kafka_handle_Produce_error. */
-                        if (rkm->rkm_u.producer.retries > 0)
-                                backoff =
-                                    (1 << (rkm->rkm_u.producer.retries - 1)) *
-                                    retry_ms;
-                        else
-                                backoff = retry_ms;
-                        /* Multiplied by 10 as backoff should be in nano
-                         * seconds. */
-                        backoff = jitter * backoff * 10;
-                        if (backoff > retry_max_ms * 1000)
-                                backoff = retry_max_ms * 1000;
-                        backoff = now + backoff;
+                        backoff = now + rd_kafka_retry_backoff_us(
+                                            rkm->rkm_u.producer.retries,
+                                            retry_ms, retry_max_ms, jitter);
                 }
                 rkm->rkm_u.producer.ts_backoff = backoff;
 

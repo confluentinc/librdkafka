@@ -7227,21 +7227,18 @@ void rd_kafka_cgrp_consumer_expedite_next_heartbeat(rd_kafka_cgrp_t *rkcg,
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CONSUMER)
                 return;
 
-        rd_kafka_t *rk = rkcg->rkcg_rk;
-        /* Calculate the exponential backoff. */
+        rd_kafka_t *rk  = rkcg->rkcg_rk;
+        int jitter      = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
+                                    100 + RD_KAFKA_RETRY_JITTER_PERCENT);
         int64_t backoff = 0;
+
+        /* Calculate the exponential backoff, starting from 1ms and
+         * limited by retry_backoff_max_ms. No backoff before the first
+         * heartbeat retry. */
         if (rkcg->rkcg_expedite_heartbeat_retries)
-                backoff = 1 << (rkcg->rkcg_expedite_heartbeat_retries - 1);
-
-        /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
-         * backoff_ms * jitter * 10 */
-        backoff = rd_jitter(100 - RD_KAFKA_RETRY_JITTER_PERCENT,
-                            100 + RD_KAFKA_RETRY_JITTER_PERCENT) *
-                  backoff * 10;
-
-        /* Backoff is limited by retry_backoff_max_ms. */
-        if (backoff > rk->rk_conf.retry_backoff_max_ms * 1000)
-                backoff = rk->rk_conf.retry_backoff_max_ms * 1000;
+                backoff = rd_kafka_retry_backoff_us(
+                    rkcg->rkcg_expedite_heartbeat_retries, 1,
+                    rk->rk_conf.retry_backoff_max_ms, jitter);
 
         /* Reset the interval as it happened `rkcg_heartbeat_intvl_ms`
          * milliseconds ago. */

@@ -1,5 +1,17 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Security considerations
+
+Bundled zlib was upgraded for vcpkg/Windows builds:
+zlib 1.3.2#1 → 1.3.2#3 (vcpkg port revision).
+
+ * zlib upgrade (1.3.2#1 → 1.3.2#3) addresses CVE-2026-76844 and
+   CVE-2026-85091.
+
+   The vcpkg checkout used for Windows builds was pinned to the commit
+   that introduced zlib 1.3.2#3, as no vcpkg release includes it yet.
+
+
 ## Fixes
 
 ### Admin fixes

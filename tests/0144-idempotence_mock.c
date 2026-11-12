@@ -358,6 +358,71 @@ static void do_test_idempo_success_after_possibly_persisted(void) {
         SUB_TEST_PASS();
 }
 
+static rd_bool_t is_produce_request(rd_kafka_mock_request_t *request,
+                                    void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Produce;
+}
+
+/**
+ * @brief The idempotent in-flight limit counts ProduceRequests, not
+ *        messages: batches of several messages must still allow
+ *        RD_KAFKA_IDEMP_MAX_INFLIGHT (5) requests in flight per partition.
+ *
+ *        The first 5 Produce responses are delayed well beyond the time
+ *        the producer is given to send its next requests, so all 5
+ *        requests can only be seen if they were in flight at once.
+ */
+static void do_test_idempo_max_inflight_requests_with_batches(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const int msgs_per_batch   = 10;
+        const int response_rtt_ms  = 5000;
+        const int wait_requests_ms = 3000;
+        size_t produce_cnt         = 0;
+        int remains                = 0;
+        test_timing_t t_wait;
+        int i;
+
+        SUB_TEST_QUICK();
+
+        rk = create_idempo_producer(&mcluster, 1, "batch.num.messages", "10",
+                                    "linger.ms", "100", NULL);
+
+        for (i = 0; i < 5; i++)
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 1, RD_KAFKAP_Produce, 1,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, response_rtt_ms);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        /* Twice as many batches as the limit. */
+        test_produce_msgs2_nowait(rk, "mytopic", 0, 0, 0, 10 * msgs_per_batch,
+                                  NULL, 64, &remains);
+
+        TIMING_START(&t_wait, "wait for 5 ProduceRequests");
+        while (TIMING_DURATION(&t_wait) / 1000 < wait_requests_ms) {
+                produce_cnt = test_mock_get_matching_request_cnt(
+                    mcluster, is_produce_request, NULL);
+                if (produce_cnt >= 5)
+                        break;
+                rd_usleep(100 * 1000, 0);
+        }
+        TIMING_STOP(&t_wait);
+
+        TEST_ASSERT(produce_cnt == 5,
+                    "Expected 5 ProduceRequests in flight with %d messages "
+                    "per batch, got %" PRIusz,
+                    msgs_per_batch, produce_cnt);
+
+        rd_kafka_flush(rk, -1);
+        TEST_ASSERT(remains == 0, "%d message(s) not delivered", remains);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
 int main_0144_idempotence_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -368,6 +433,8 @@ int main_0144_idempotence_mock(int argc, char **argv) {
         do_test_idempo_duplicate_sequence_number_after_possibly_persisted();
 
         do_test_idempo_success_after_possibly_persisted();
+
+        do_test_idempo_max_inflight_requests_with_batches();
 
         return 0;
 }

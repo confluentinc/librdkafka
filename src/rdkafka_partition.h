@@ -188,6 +188,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rd_atomic32_t rktp_msgs_inflight; /**< Current number of
                                            *   messages in-flight to/from
                                            *   the broker. */
+        rd_atomic32_t rktp_reqs_inflight; /**< Current number of
+                                           *   ProduceRequests in-flight
+                                           *   to/from the broker. */
 
         uint64_t rktp_msgid; /**< Current/last message id.
                               *   Each message enqueued on a

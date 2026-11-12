@@ -9,6 +9,14 @@
 
 ### Producer fixes
 
+* The idempotent producer limits the number of in-flight ProduceRequests
+  per partition to 5, the broker's sequence de-duplication window, but
+  compared that limit against the number of in-flight messages.
+  Any batch of 5 or more messages therefore left room for only one
+  ProduceRequest in flight per partition, capping per-partition throughput
+  at one batch per round-trip. The limit now counts ProduceRequests.
+  Happening since 1.0.0. (#5632, @andreascasapu-imc)
+
 * Reject malformed Produce response record-error counts before allocating
   memory (#5580, @shoemoney).
 

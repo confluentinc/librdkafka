@@ -2259,6 +2259,11 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 
         rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 
+        /* Either timer may have fired: this sequence covers both. */
+        rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr, rd_true);
+        rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_trigger_tmr,
+                            rd_true);
+
         rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 1);
         rd_kafka_reset_any_broker_down_reported(rk);
 
@@ -4580,13 +4585,20 @@ void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk) {
                 return;
 
         rd_kafka_timer_start_oneshot(
-            &rk->rk_timers, &rk->rebootstrap_tmr, rd_false /*don't restart*/,
+            &rk->rk_timers, &rk->rebootstrap_trigger_tmr,
+            rd_false /*don't restart*/,
             rk->rk_conf.metadata_recovery_rebootstrap_trigger_ms * 1000LL,
             rd_kafka_rebootstrap_tmr_cb, NULL);
 }
 
 /**
  * Stops rebootstrap timer, for example after a successful metadata response.
+ *
+ * Only the timer started by rd_kafka_rebootstrap_tmr_start_maybe() is
+ * stopped. A re-bootstrap already scheduled by rd_kafka_rebootstrap()
+ * still runs: a successful metadata response doesn't mean the client can
+ * still reach a broker, and cancelling it would leave
+ * rk_rebootstrap_in_progress set, disabling re-bootstraps for good.
  *
  * @return 1 if the timer was started (before being stopped), else 0.
  *
@@ -4599,7 +4611,7 @@ int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk) {
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return 0;
 
-        return rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
+        return rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_trigger_tmr,
                                    rd_true /* lock */);
 }
 

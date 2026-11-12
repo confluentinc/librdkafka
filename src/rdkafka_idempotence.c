@@ -437,6 +437,15 @@ void rd_kafka_idemp_request_pid_failed(rd_kafka_broker_t *rkb,
                     rd_kafka_broker_name(rkb), rd_kafka_err2str(err));
 
         rd_kafka_wrlock(rk);
+        if (rk->rk_eos.idemp_state != RD_KAFKA_IDEMP_STATE_WAIT_PID) {
+                rd_kafka_dbg(rk, EOS, "GETPID",
+                             "Ignoring InitProducerId failure (%s) "
+                             "in state %s",
+                             rd_kafka_err2str(err),
+                             rd_kafka_idemp_state2str(rk->rk_eos.idemp_state));
+                rd_kafka_wrunlock(rk);
+                return;
+        }
 
         if (rd_kafka_idemp_check_error(rk, err, errstr, rd_false)) {
                 rd_kafka_wrunlock(rk);

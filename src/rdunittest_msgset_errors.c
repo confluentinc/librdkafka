@@ -198,7 +198,6 @@ static void ut_write_msgset_v2_header(char *buf,
         offset += 4;
 }
 
-#if WITH_ZSTD
 /**
  * @brief Calculate correct CRC32C for MessageSet v2
  *        CRC covers from Attributes to end of records
@@ -211,7 +210,6 @@ static uint32_t ut_calc_msgset_crc(const char *buf,
         size_t data_len  = total_len - offset_to_attributes;
         return rd_crc32c(0, data, data_len);
 }
-#endif /* WITH_ZSTD */
 
 /**
  * @brief Write a varint (used in Record format)
@@ -1493,6 +1491,231 @@ static int unittest_msgset_all_error_types_with_valid(void) {
 /**
  * @brief Run all MessageSet error handling unit tests
  */
+/**
+ * @name Regular consumer MessageSet v2 batch errors
+ * @{
+ *
+ * A failed MessageSet v2 can't be consumed and the fetch position is not
+ * advanced past it, so the error must carry the MessageSet's last offset for
+ * the application to be able to seek past it.
+ */
+
+/* Offset of the Crc and Attributes fields in a MessageSet v2 header */
+#define UT_MSGSET_V2_CRC_OFFSET  17
+#define UT_MSGSET_V2_ATTR_OFFSET 21
+
+/**
+ * @brief Create a minimal regular (non-share) consumer for testing
+ */
+static rd_kafka_t *ut_create_test_consumer(void) {
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        char errstr[512];
+
+        if (rd_kafka_conf_set(conf, "check.crcs", "true", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
+
+        return rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+}
+
+/**
+ * @brief Pop the batch error op from \p rkq and verify its error code, offset
+ *        and that its error string contains \p exp_substr.
+ *
+ * @returns 0 on success, 1 on failure.
+ */
+static int ut_verify_batch_err(rd_kafka_q_t *rkq,
+                               rd_kafka_resp_err_t exp_err,
+                               int64_t exp_offset,
+                               const char *exp_substr) {
+        rd_kafka_op_t *rko = rd_kafka_q_pop(rkq, 1000, 0);
+
+        RD_UT_ASSERT(rko != NULL, "Expected an error op, got timeout");
+        RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
+                     "Expected CONSUMER_ERR op, got %d", rko->rko_type);
+        RD_UT_ASSERT(rko->rko_err == exp_err, "Expected %s, got %s",
+                     rd_kafka_err2str(exp_err), rd_kafka_err2str(rko->rko_err));
+        RD_UT_ASSERT(rko->rko_u.err.offset == exp_offset,
+                     "Expected offset %" PRId64 ", got %" PRId64, exp_offset,
+                     rko->rko_u.err.offset);
+        RD_UT_ASSERT(rko->rko_u.err.errstr &&
+                         strstr(rko->rko_u.err.errstr, exp_substr),
+                     "Expected error string to contain \"%s\", got: %s",
+                     exp_substr, rko->rko_u.err.errstr);
+        rd_kafka_op_destroy(rko);
+
+        return 0;
+}
+
+
+#if WITH_ZSTD
+/**
+ * @brief Test that a decompression failure reports the MessageSet end offset
+ */
+static int unittest_msgset_decompression_error_end_offset(void) {
+        rd_kafka_t *rk;
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_buf_t *rkbuf;
+        char *msgset_data;
+        size_t msgset_size               = 200;
+        int64_t BaseOffset               = 200;
+        int32_t LastOffsetDelta          = 2; /* Offsets 200-202 */
+        struct rd_kafka_toppar_ver tver  = {.version = 11};
+
+        RD_UT_BEGIN();
+
+        rk = ut_create_test_consumer();
+        RD_UT_ASSERT(rk, "Failed to create consumer");
+
+        rktp = ut_create_mock_toppar(rk, "test-topic-decompress-regular", 0);
+        RD_UT_ASSERT(rktp, "Failed to create toppar");
+
+        /* MessageSet v2 with ZSTD compression but corrupted compressed data */
+        msgset_data = rd_calloc(1, msgset_size);
+        ut_write_msgset_v2_header(msgset_data, BaseOffset,
+                                  (int32_t)msgset_size - 12, -1, /* PLE */
+                                  2,                             /* MagicByte */
+                                  0, /* Crc, set below */
+                                  4, /* Attributes: ZSTD */
+                                  LastOffsetDelta, 0, 0, -1, -1, -1, 3);
+        memset(msgset_data + 61, 0xAB, msgset_size - 61);
+        ut_put_be32(msgset_data + UT_MSGSET_V2_CRC_OFFSET,
+                    ut_calc_msgset_crc(msgset_data, UT_MSGSET_V2_ATTR_OFFSET,
+                                       msgset_size));
+
+        rkbuf = rd_kafka_buf_new_shadow(msgset_data, msgset_size, rd_free);
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rk);
+
+        rd_kafka_msgset_parse(rkbuf, NULL, rktp, NULL, &tver);
+
+        if (ut_verify_batch_err(rktp->rktp_fetchq,
+                                RD_KAFKA_RESP_ERR__BAD_COMPRESSION, BaseOffset,
+                                "MessageSet ends at offset 202"))
+                return 1;
+
+        RD_UT_ASSERT(rd_kafka_q_pop(rktp->rktp_fetchq, 100, 0) == NULL,
+                     "Expected the MessageSet to be reported once");
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_toppar_destroy(rktp);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+#endif /* WITH_ZSTD */
+
+
+/**
+ * @brief Test that a CRC failure reports the MessageSet end offset, flagged
+ *        as unverified since it is read from the failed CRC region
+ */
+static int unittest_msgset_crc_error_end_offset(void) {
+        rd_kafka_t *rk;
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_buf_t *rkbuf;
+        char *msgset_data;
+        size_t msgset_size              = 61;
+        int64_t BaseOffset              = 100;
+        int32_t LastOffsetDelta         = 4; /* Offsets 100-104 */
+        struct rd_kafka_toppar_ver tver = {.version = 11};
+
+        RD_UT_BEGIN();
+
+        rk = ut_create_test_consumer();
+        RD_UT_ASSERT(rk, "Failed to create consumer");
+
+        rktp = ut_create_mock_toppar(rk, "test-topic-crc-regular", 0);
+        RD_UT_ASSERT(rktp, "Failed to create toppar");
+
+        /* MessageSet v2 with an intentionally wrong CRC */
+        msgset_data = rd_calloc(1, msgset_size);
+        ut_write_msgset_v2_header(msgset_data, BaseOffset,
+                                  (int32_t)msgset_size - 12, -1, /* PLE */
+                                  2,                             /* MagicByte */
+                                  0xDEADBEEF,                    /* Wrong Crc */
+                                  0, /* Attributes: no compression */
+                                  LastOffsetDelta, 0, 0, -1, -1, -1, 5);
+
+        rkbuf = rd_kafka_buf_new_shadow(msgset_data, msgset_size, rd_free);
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rk);
+
+        rd_kafka_msgset_parse(rkbuf, NULL, rktp, NULL, &tver);
+
+        if (ut_verify_batch_err(rktp->rktp_fetchq, RD_KAFKA_RESP_ERR__BAD_MSG,
+                                BaseOffset,
+                                "MessageSet ends at offset 104 (unverified)"))
+                return 1;
+
+        /* Not asserting a single op here: the CRC branch skips to the wrong
+         * position (see the FIXME on rd_kafka_buf_skip_to() in
+         * rd_kafka_msgset_reader_v2()) and parses the trailing bytes as
+         * another MessageSet, which emits a second, bogus error op. */
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_toppar_destroy(rktp);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @brief Test that a record parse failure within a MessageSet reports the
+ *        MessageSet end offset
+ */
+static int unittest_msgset_record_error_end_offset(void) {
+        rd_kafka_t *rk;
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_buf_t *rkbuf;
+        char *msgset_data;
+        size_t msgset_size;
+        int64_t BaseOffset              = 300; /* Offsets 300-302 */
+        struct rd_kafka_toppar_ver tver = {.version = 11};
+
+        RD_UT_BEGIN();
+
+        rk = ut_create_test_consumer();
+        RD_UT_ASSERT(rk, "Failed to create consumer");
+
+        rktp = ut_create_mock_toppar(rk, "test-topic-record-regular", 0);
+        RD_UT_ASSERT(rktp, "Failed to create toppar");
+
+        /* Valid MessageSet turned into a control batch: its records have no
+         * key, which the control message parser rejects as an invalid key
+         * size, failing the record parse with a valid CRC. */
+        msgset_data = rd_calloc(1, 8192);
+        msgset_size = ut_build_valid_msgset_v2(msgset_data, BaseOffset, 3, NULL,
+                                               NULL);
+        ut_put_be16(msgset_data + UT_MSGSET_V2_ATTR_OFFSET,
+                    RD_KAFKA_MSGSET_V2_ATTR_CONTROL);
+        ut_put_be32(msgset_data + UT_MSGSET_V2_CRC_OFFSET,
+                    ut_calc_msgset_crc(msgset_data, UT_MSGSET_V2_ATTR_OFFSET,
+                                       msgset_size));
+
+        rkbuf = rd_kafka_buf_new_shadow(msgset_data, msgset_size, rd_free);
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rk);
+
+        rd_kafka_msgset_parse(rkbuf, NULL, rktp, NULL, &tver);
+
+        if (ut_verify_batch_err(rktp->rktp_fetchq, RD_KAFKA_RESP_ERR__BAD_MSG,
+                                BaseOffset, "MessageSet ends at offset 302"))
+                return 1;
+
+        RD_UT_ASSERT(rd_kafka_q_pop(rktp->rktp_fetchq, 100, 0) == NULL,
+                     "Expected the MessageSet to be reported once");
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_toppar_destroy(rktp);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**@}*/
+
+
 int rd_kafka_unittest_msgset_errors(void) {
         int fails = 0;
 
@@ -1516,6 +1739,13 @@ int rd_kafka_unittest_msgset_errors(void) {
 #if WITH_ZSTD
         fails += unittest_msgset_all_error_types_with_valid();
 #endif
+
+        /* Regular consumer: MessageSet end offset reporting */
+#if WITH_ZSTD
+        fails += unittest_msgset_decompression_error_end_offset();
+#endif
+        fails += unittest_msgset_crc_error_end_offset();
+        fails += unittest_msgset_record_error_end_offset();
 
         return fails;
 }

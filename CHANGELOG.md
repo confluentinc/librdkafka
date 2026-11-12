@@ -1,5 +1,21 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Security considerations
+
+Bundled libcurl was upgraded for source/autoconf builds:
+libcurl 8.22.0 → 8.23.0.
+
+ * libcurl upgrade (8.22.0 → 8.23.0) addresses CVE-2026-92392 (HTTP/2 upload
+   use-after-free), CVE-2026-107929, CVE-2026-107928, CVE-2026-94266,
+   CVE-2026-94265, CVE-2026-92391, CVE-2026-92390, CVE-2026-92389,
+   CVE-2026-92388, CVE-2026-92387, CVE-2026-92386, CVE-2026-86415,
+   CVE-2026-86414, CVE-2026-86413, CVE-2026-87866, CVE-2026-87865,
+   CVE-2026-86412, CVE-2026-86410, CVE-2026-87863, CVE-2026-87862 and
+   CVE-2026-87861.
+
+   vcpkg/Windows builds are unchanged and remain on libcurl 8.21.0.
+
+
 ## Fixes
 
 ### Admin fixes

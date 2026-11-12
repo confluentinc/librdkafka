@@ -767,7 +767,14 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
         }
 
         if (rktp->rktp_broker) {
-                if (rktp->rktp_broker == rkb) {
+                /* A migration to another broker may still be in flight
+                 * (rktp_next_broker): the partition only looks like it is
+                 * on the right broker, and returning here would let it
+                 * land on the wrong one while rktp_broker_id says
+                 * otherwise. */
+                if (rktp->rktp_broker == rkb &&
+                    (!rktp->rktp_next_broker ||
+                     rktp->rktp_next_broker == rkb)) {
                         /* No change in broker */
                         return 0;
                 }
@@ -878,12 +885,16 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
          * the flag to false here so the "not migrating away from
          * preferred replica" branch is structurally unreachable on the
          * share path, rather than depending on the runtime equality
-         * happening to hold. */
+         * happening to hold.
+         * Only a partition deliberately delegated to a preferred replica
+         * (rktp_broker_id != leader) is fetching from a follower. A partition
+         * that ended up on another broker while rktp_broker_id already names
+         * the leader is misdelegated and must migrate. */
         fetching_from_follower =
             !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
             leader != NULL && rktp->rktp_broker != NULL &&
             rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
-            rktp->rktp_broker != leader;
+            rktp->rktp_broker != leader && rktp->rktp_broker_id != leader_id;
 
         if (fetching_from_follower && rktp->rktp_leader_id == leader_id) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",
@@ -2379,4 +2390,197 @@ void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
         rd_kafka_topic_metadata_update(rkt, &mdt, &mdit, rd_clock());
         rd_kafka_wrunlock(rkt->rkt_rk);
         rd_free(partitions);
+}
+
+
+#include "rdkafka_mock.h"
+#include "rdunittest.h"
+
+/**
+ * @brief Returns the broker \p rktp is delegated to once it is not migrating,
+ *        with a reference held, or NULL if it has not settled in time.
+ */
+static rd_kafka_broker_t *ut_toppar_wait_settled(rd_kafka_toppar_t *rktp,
+                                                 int timeout_ms) {
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
+
+        do {
+                rd_kafka_broker_t *rkb = NULL;
+
+                rd_kafka_toppar_lock(rktp);
+                if (!rktp->rktp_next_broker && rktp->rktp_broker &&
+                    rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL) {
+                        rkb = rktp->rktp_broker;
+                        rd_kafka_broker_keep(rkb);
+                }
+                rd_kafka_toppar_unlock(rktp);
+
+                if (rkb)
+                        return rkb;
+                rd_usleep(100, NULL);
+        } while (!rd_timeout_expired(rd_timeout_remains(abs_timeout)));
+
+        return NULL;
+}
+
+struct ut_leader_env {
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *app_rkt;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_broker_t *rkb1;
+        rd_kafka_broker_t *rkb2;
+};
+
+/**
+ * @brief Creates a consumer on a 3-broker mock cluster fetching partition 0 of
+ *        a topic led by broker 2.
+ */
+static int ut_leader_env_setup(struct ut_leader_env *env, const char *topic) {
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_broker_t *rkb = NULL;
+        char errstr[256];
+        int i;
+
+        memset(env, 0, sizeof(*env));
+        rd_kafka_conf_set(conf, "test.mock.num.brokers", "3", NULL, 0);
+        env->rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(env->rk, "failed to create consumer: %s", errstr);
+
+        mcluster = rd_kafka_handle_mock_cluster(env->rk);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        env->app_rkt = rd_kafka_topic_new(env->rk, topic, NULL);
+        RD_UT_ASSERT(
+            !rd_kafka_consume_start(env->app_rkt, 0, RD_KAFKA_OFFSET_END),
+            "consume_start failed");
+        env->rkt = rd_kafka_topic_proper(env->app_rkt);
+        /* The partition is only a desired partition until metadata arrives. */
+        for (i = 0; i < 1000 && !env->rktp; i++) {
+                rd_kafka_topic_rdlock(env->rkt);
+                env->rktp = rd_kafka_toppar_get(env->rkt, 0, rd_false);
+                rd_kafka_topic_rdunlock(env->rkt);
+                if (!env->rktp)
+                        rd_usleep(10 * 1000, NULL);
+        }
+        RD_UT_ASSERT(env->rktp, "partition 0 did not appear in metadata");
+
+        for (i = 0; i < 100 && !(rkb && rkb->rkb_nodeid == 2); i++) {
+                if (rkb)
+                        rd_kafka_broker_destroy(rkb);
+                rkb = ut_toppar_wait_settled(env->rktp, 100);
+        }
+        RD_UT_ASSERT(rkb && rkb->rkb_nodeid == 2,
+                     "partition 0 was not delegated to its leader broker 2");
+        rd_kafka_broker_destroy(rkb);
+
+        env->rkb1 = rd_kafka_broker_find_by_nodeid(env->rk, 1);
+        env->rkb2 = rd_kafka_broker_find_by_nodeid(env->rk, 2);
+        RD_UT_ASSERT(env->rkb1 && env->rkb2, "brokers 1 and 2 not found");
+        return 0;
+}
+
+static void ut_leader_env_teardown(struct ut_leader_env *env) {
+        rd_kafka_broker_destroy(env->rkb1);
+        rd_kafka_broker_destroy(env->rkb2);
+        rd_kafka_toppar_destroy(env->rktp);
+        rd_kafka_consume_stop(env->app_rkt, 0);
+        rd_kafka_topic_destroy(env->app_rkt);
+        rd_kafka_destroy(env->rk);
+}
+
+/**
+ * @brief During a leader election brokers can answer metadata requests with
+ *        different leaders for the same partition back-to-back, with the same
+ *        or an increasing leader epoch. A leader update that arrives while the
+ *        partition is still migrating to the previous one must not leave it on
+ *        that previous leader.
+ */
+static int ut_toppar_leader_update_during_migration0(rd_bool_t same_epoch) {
+        struct ut_leader_env env;
+        rd_kafka_broker_t *rkb;
+        int32_t leader_epoch;
+
+        RD_UT_BEGIN();
+        RD_UT_SAY("same_epoch=%s\n", RD_STR_ToF(same_epoch));
+        if (ut_leader_env_setup(&env, "ut_leader_update_during_migration"))
+                return 1;
+
+        rd_kafka_toppar_lock(env.rktp);
+        leader_epoch = env.rktp->rktp_leader_epoch;
+        rd_kafka_toppar_unlock(env.rktp);
+
+        /* The broker thread takes the topic read lock when handling
+         * PARTITION_LEAVE, so holding the write lock across both updates
+         * makes the second one arrive while the first migration is still in
+         * flight. */
+        rd_kafka_topic_wrlock(env.rkt);
+        rd_kafka_toppar_leader_update(env.rkt, 0, 1, env.rkb1,
+                                      leader_epoch + 1);
+        rd_kafka_toppar_leader_update(env.rkt, 0, 2, env.rkb2,
+                                      leader_epoch + (same_epoch ? 1 : 2));
+        rd_kafka_topic_wrunlock(env.rkt);
+
+        rkb = ut_toppar_wait_settled(env.rktp, 5000);
+        RD_UT_ASSERT(rkb, "partition did not settle after migration");
+        RD_UT_ASSERT(rkb == env.rkb2,
+                     "partition settled on broker %" PRId32
+                     " instead of its leader 2",
+                     rkb->rkb_nodeid);
+        rd_kafka_broker_destroy(rkb);
+
+        ut_leader_env_teardown(&env);
+        RD_UT_PASS();
+}
+
+static int ut_toppar_leader_update_during_migration(void) {
+        return ut_toppar_leader_update_during_migration0(rd_false) +
+               ut_toppar_leader_update_during_migration0(rd_true);
+}
+
+/**
+ * @brief A partition left on a broker other than its leader while its
+ *        delegated broker id already names the leader is not fetching from a
+ *        preferred replica, and must migrate to the leader on the next leader
+ *        update.
+ */
+static int ut_toppar_misdelegated_migrates_to_leader(void) {
+        struct ut_leader_env env;
+        rd_kafka_broker_t *rkb;
+
+        RD_UT_BEGIN();
+        if (ut_leader_env_setup(&env, "ut_misdelegated_migrates_to_leader"))
+                return 1;
+
+        rd_kafka_toppar_lock(env.rktp);
+        rd_kafka_toppar_broker_delegate(env.rktp, env.rkb1);
+        rd_kafka_toppar_unlock(env.rktp);
+        rkb = ut_toppar_wait_settled(env.rktp, 5000);
+        RD_UT_ASSERT(rkb, "partition did not settle after delegation");
+        rd_kafka_broker_destroy(rkb);
+
+        rd_kafka_topic_wrlock(env.rkt);
+        rd_kafka_toppar_leader_update(env.rkt, 0, 2, env.rkb2, -1);
+        rd_kafka_topic_wrunlock(env.rkt);
+
+        rkb = ut_toppar_wait_settled(env.rktp, 5000);
+        RD_UT_ASSERT(rkb, "partition did not settle after leader update");
+        RD_UT_ASSERT(rkb == env.rkb2,
+                     "partition stayed on broker %" PRId32
+                     " instead of migrating to its leader 2",
+                     rkb->rkb_nodeid);
+        rd_kafka_broker_destroy(rkb);
+
+        ut_leader_env_teardown(&env);
+        RD_UT_PASS();
+}
+
+int unittest_topic(void) {
+        int fails = 0;
+
+        fails += ut_toppar_leader_update_during_migration();
+        fails += ut_toppar_misdelegated_migrates_to_leader();
+        return fails;
 }

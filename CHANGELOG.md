@@ -7,6 +7,12 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+### Consumer fixes
+
+* A partition could stay on a broker that is not its leader, failing every
+  fetch with `NOT_LEADER_FOR_PARTITION`, when a second leader update arrived
+  before it had left its broker after a first one (@hatemosphere, #5593).
+
 ### Producer fixes
 
 * Reject malformed Produce response record-error counts before allocating

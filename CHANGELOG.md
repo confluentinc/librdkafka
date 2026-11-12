@@ -1,5 +1,10 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Enhancements
+
+* Add `rd_kafka_message_topic_id()` to expose the topic UUID captured with a
+  delivered share-consumer message (@Shekharrajak).
+
 ## Fixes
 
 ### Admin fixes

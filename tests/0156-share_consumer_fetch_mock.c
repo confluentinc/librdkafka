@@ -44,6 +44,14 @@ typedef struct test_ctx_s {
         const char *bootstraps;
 } test_ctx_t;
 
+static void topic_id_dr_msg_cb(rd_kafka_t *rk,
+                               const rd_kafka_message_t *message,
+                               void *opaque) {
+        TEST_ASSERT(rd_kafka_message_topic_id(message) == NULL,
+                    "Producer message must not expose a share topic ID");
+        test_dr_msg_cb(rk, message, opaque);
+}
+
 static test_ctx_t test_ctx_new(void) {
         test_ctx_t ctx;
         rd_kafka_conf_t *conf;
@@ -69,7 +77,7 @@ static test_ctx_t test_ctx_new(void) {
         /* Create a producer targeting the mock cluster */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
-        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        rd_kafka_conf_set_dr_msg_cb(conf, topic_id_dr_msg_cb);
 
         ctx.producer =
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
@@ -251,6 +259,150 @@ static void do_test_empty_topic_no_records(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
+        SUB_TEST_PASS();
+}
+
+static void do_test_message_topic_id(void) {
+        const char *topics[] = {"share_topic_id_a", "share_topic_id_b"};
+        const int records_per_partition = 6;
+        int seen[2][2][6]               = {{{0}}};
+        rd_kafka_Uuid_t *topic_ids[2]   = {NULL, NULL};
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *classic;
+        rd_kafka_message_t *message;
+        rd_kafka_message_t error_message = {0};
+        test_ctx_t ctx;
+        rd_ts_t deadline;
+        int received = 0;
+        int topic, partition, offset;
+
+        SUB_TEST_QUICK();
+
+        TEST_ASSERT(rd_kafka_message_topic_id(NULL) == NULL,
+                    "NULL message must not expose a topic ID");
+        error_message.err = RD_KAFKA_RESP_ERR__BAD_MSG;
+        TEST_ASSERT(rd_kafka_message_topic_id(&error_message) == NULL,
+                    "Error message must not expose a topic ID");
+
+        ctx = test_ctx_new();
+        for (topic = 0; topic < 2; topic++) {
+                TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster,
+                                                       topics[topic], 2, 1) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Failed to create mock topic");
+                for (partition = 0; partition < 2; partition++)
+                        test_produce_msgs2(ctx.producer, topics[topic], 0,
+                                           partition, 0, records_per_partition,
+                                           NULL, 0);
+        }
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", "share-topic-id");
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        consumer = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(consumer != NULL, "Failed to create share consumer");
+        subscribe_topics(consumer, topics, 2);
+
+        deadline = test_clock() + (rd_ts_t)30 * 1000 * 1000;
+        while (received < 32 && test_clock() < deadline) {
+                rd_kafka_messages_t *batch               = NULL;
+                rd_kafka_topic_partition_list_t *results = NULL;
+                rd_kafka_error_t *error;
+                size_t i;
+
+                error = rd_kafka_share_poll(consumer, 500, &batch);
+                TEST_ASSERT(error == NULL, "Share poll failed: %s",
+                            error ? rd_kafka_error_string(error) : "");
+                for (i = 0; i < rd_kafka_messages_count(batch); i++) {
+                        const rd_kafka_Uuid_t *id;
+                        rd_kafka_share_AcknowledgeType_t type;
+                        int *count;
+                        message = rd_kafka_messages_get(batch, i);
+                        TEST_ASSERT(!message->err, "Unexpected message error");
+                        topic = !strcmp(rd_kafka_topic_name(message->rkt),
+                                        topics[0])
+                                    ? 0
+                                    : 1;
+                        TEST_ASSERT(!strcmp(rd_kafka_topic_name(message->rkt),
+                                            topics[topic]),
+                                    "Unexpected topic");
+                        partition = message->partition;
+                        offset    = (int)message->offset;
+                        TEST_ASSERT(partition >= 0 && partition < 2 &&
+                                        offset >= 0 &&
+                                        offset < records_per_partition,
+                                    "Unexpected partition/offset");
+                        id = rd_kafka_message_topic_id(message);
+                        TEST_ASSERT(id != NULL, "Share topic ID unavailable");
+                        TEST_ASSERT(
+                            rd_kafka_Uuid_most_significant_bits(id) ||
+                                rd_kafka_Uuid_least_significant_bits(id),
+                            "Share topic ID is zero");
+                        if (!topic_ids[topic])
+                                topic_ids[topic] = rd_kafka_Uuid_copy(id);
+                        TEST_ASSERT(
+                            !strcmp(rd_kafka_Uuid_base64str(id),
+                                    rd_kafka_Uuid_base64str(topic_ids[topic])),
+                            "Topic ID changed across partitions/polls");
+                        count = &seen[topic][partition][offset];
+                        ++*count;
+                        TEST_ASSERT(
+                            *count <= (offset == 1 || offset == 4 ? 2 : 1),
+                            "Unexpected duplicate at offset %d", offset);
+                        TEST_ASSERT(rd_kafka_message_delivery_count(message) ==
+                                        *count,
+                                    "Unexpected delivery count");
+                        type = *count == 1 && (offset == 1 || offset == 4)
+                                   ? RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE
+                                   : RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
+                        TEST_ASSERT(rd_kafka_share_acknowledge_type(
+                                        consumer, message, type) ==
+                                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "Acknowledgement failed");
+                        received++;
+                }
+                error = rd_kafka_share_commit_sync(consumer, 5000, &results);
+                TEST_ASSERT(error == NULL, "Share commit failed: %s",
+                            error ? rd_kafka_error_string(error) : "");
+                if (results)
+                        rd_kafka_topic_partition_list_destroy(results);
+                rd_kafka_messages_destroy(batch);
+        }
+        TEST_ASSERT(received == 32, "Expected 32 deliveries, got %d", received);
+        TEST_ASSERT(strcmp(rd_kafka_Uuid_base64str(topic_ids[0]),
+                           rd_kafka_Uuid_base64str(topic_ids[1])),
+                    "Different topics exposed the same ID");
+        for (topic = 0; topic < 2; topic++)
+                for (partition = 0; partition < 2; partition++)
+                        for (offset = 0; offset < records_per_partition;
+                             offset++)
+                                TEST_ASSERT(
+                                    seen[topic][partition][offset] ==
+                                        (offset == 1 || offset == 4 ? 2 : 1),
+                                    "Missing source record");
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        classic = test_create_consumer("classic-topic-id", NULL, conf, NULL);
+        test_consumer_assign_partition("topic ID", classic, topics[0], 0,
+                                       RD_KAFKA_OFFSET_BEGINNING);
+        message  = NULL;
+        deadline = test_clock() + (rd_ts_t)10 * 1000 * 1000;
+        while (!message && test_clock() < deadline)
+                message = rd_kafka_consumer_poll(classic, 500);
+        TEST_ASSERT(message && !message->err, "Classic message unavailable");
+        TEST_ASSERT(rd_kafka_message_topic_id(message) == NULL,
+                    "Classic message must not expose a share topic ID");
+        rd_kafka_message_destroy(message);
+        test_consumer_close(classic);
+        rd_kafka_destroy(classic);
+        rd_kafka_Uuid_destroy(topic_ids[0]);
+        rd_kafka_Uuid_destroy(topic_ids[1]);
+        test_ctx_destroy(&ctx);
         SUB_TEST_PASS();
 }
 
@@ -1501,6 +1653,7 @@ int main_0156_share_consumer_fetch_mock(int argc, char **argv) {
         do_test_followup_fetch();
         do_test_multi_partition();
         do_test_multi_topic();
+        do_test_message_topic_id();
         do_test_empty_topic_no_records();
         do_test_sharefetch_session_expiry_rtt();
         do_test_forgotten_topics();

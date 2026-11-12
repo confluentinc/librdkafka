@@ -2263,7 +2263,8 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                             &mdi->topics[i].partitions[j];
                         int32_t part = mdp->id, current_leader_epoch;
 
-                        if (part >= rkmce->rkmce_mtopic.partition_cnt) {
+                        if (part < 0 ||
+                            part >= rkmce->rkmce_mtopic.partition_cnt) {
                                 rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
                                              "Partition %s(%s)[%" PRId32
                                              "]: not found "

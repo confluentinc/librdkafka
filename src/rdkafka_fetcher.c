@@ -486,6 +486,10 @@ rd_kafka_handle_Fetch_metadata_update(rd_kafka_broker_t *rkb,
                                     &Partition->CurrentLeader);
                                 changed_partition++;
                         }
+                        /* Partitions without a valid leader were skipped
+                         * above: only expose the ones that were set. */
+                        md->topics[changed_topic].partition_cnt =
+                            changed_partition;
                         changed_topic++;
                 }
 

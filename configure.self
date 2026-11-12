@@ -291,6 +291,16 @@ void foo (void) {
 }
 '
 
+    # See if system() is available.
+    mkl_compile_check "system" "HAVE_SYSTEM" disable CC "" \
+'
+#include <stdlib.h>
+
+void foo (void) {
+  system("true");
+}
+'
+
     # Figure out what tool to use for dumping public symbols.
     # We rely on configure.cc setting up $NM if it exists.
     if mkl_env_check "nm" "" cont "NM" ; then

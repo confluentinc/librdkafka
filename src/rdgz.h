@@ -43,4 +43,6 @@ void *rd_gz_decompress(const void *compressed,
                        int compressed_len,
                        uint64_t *decompressed_lenp);
 
+int unittest_gz(void);
+
 #endif /* _RDGZ_H_ */

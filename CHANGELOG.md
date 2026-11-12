@@ -2,8 +2,8 @@
 
 ## Security considerations
 
-Bundled libcurl was upgraded for source/autoconf builds:
-libcurl 8.22.0 → 8.23.0.
+Bundled libcurl was upgraded for both source/autoconf and vcpkg/Windows builds:
+libcurl 8.22.0 → 8.23.0 (source/autoconf), 8.21.0 → 8.23.0 (vcpkg).
 
  * libcurl upgrade (8.22.0 → 8.23.0) addresses CVE-2026-92392 (HTTP/2 upload
    use-after-free), CVE-2026-107929, CVE-2026-107928, CVE-2026-94266,
@@ -13,7 +13,8 @@ libcurl 8.22.0 → 8.23.0.
    CVE-2026-86412, CVE-2026-86410, CVE-2026-87863, CVE-2026-87862 and
    CVE-2026-87861.
 
-   vcpkg/Windows builds are unchanged and remain on libcurl 8.21.0.
+   The vcpkg checkout used for Windows builds was moved to the 2026.10.16
+   release, which provides libcurl 8.23.0.
 
 
 ## Fixes

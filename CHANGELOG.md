@@ -6,6 +6,13 @@
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
+* Fail admin requests whose response can't be used instead of crashing:
+  `DescribeCluster` and `DescribeTopics` on a Metadata response with a
+  top-level error, `DescribeConsumerGroups` on a member assignment it can't
+  read or a response cut short, `ListConsumerGroups`, `ElectLeaders`,
+  `CreateAcls`, `DescribeAcls` and `DeleteAcls` on a response cut short.
+  `DescribeAcls` now fails with the broker's request-level error instead of
+  returning an empty list.
 
 ### Producer fixes
 

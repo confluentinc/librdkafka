@@ -136,51 +136,50 @@
  * allocation fails all hope is lost and the application
  * will fail anyway, so no need to handle it handsomely.
  */
-static RD_INLINE RD_UNUSED void *rd_calloc(size_t num, size_t sz) {
-        void *p = calloc(num, sz);
-        rd_assert(p);
-        return p;
-}
+
+typedef void *(*rd_malloc_t)(size_t sz, void *opaque);
+typedef void *(*rd_calloc_t)(size_t n, size_t sz, void *opaque);
+typedef void *(*rd_realloc_t)(void *ptr, size_t sz, void *opaque);
+typedef char *(*rd_strdup_t)(const char *s, void *opaque);
+typedef char *(*rd_strndup_t)(const char *s, size_t len, void *opaque);
+typedef void (*rd_free_t)(void *ptr, void *opaque);
+
+struct rd_allocator {
+        rd_bool_t is_set;
+        rd_malloc_t _malloc;
+        rd_calloc_t _calloc;
+        rd_realloc_t _realloc;
+        rd_strdup_t _strdup;
+        rd_strndup_t _strndup;
+        rd_free_t _free;
+        void *opaque;
+};
+
+extern struct rd_allocator _rd_allocator;
 
 static RD_INLINE RD_UNUSED void *rd_malloc(size_t sz) {
-        void *p = malloc(sz);
-        rd_assert(p);
-        return p;
+        return _rd_allocator._malloc(sz, _rd_allocator.opaque);
+}
+
+static RD_INLINE RD_UNUSED void *rd_calloc(size_t n, size_t sz) {
+        return _rd_allocator._calloc(n, sz, _rd_allocator.opaque);
 }
 
 static RD_INLINE RD_UNUSED void *rd_realloc(void *ptr, size_t sz) {
-        void *p = realloc(ptr, sz);
-        rd_assert(p);
-        return p;
-}
-
-static RD_INLINE RD_UNUSED void rd_free(void *ptr) {
-        free(ptr);
+        return _rd_allocator._realloc(ptr, sz, _rd_allocator.opaque);
 }
 
 static RD_INLINE RD_UNUSED char *rd_strdup(const char *s) {
-#ifndef _WIN32
-        char *n = strdup(s);
-#else
-        char *n = _strdup(s);
-#endif
-        rd_assert(n);
-        return n;
+        return _rd_allocator._strdup(s, _rd_allocator.opaque);
 }
 
 static RD_INLINE RD_UNUSED char *rd_strndup(const char *s, size_t len) {
-#if HAVE_STRNDUP
-        char *n = strndup(s, len);
-        rd_assert(n);
-#else
-        char *n = (char *)rd_malloc(len + 1);
-        rd_assert(n);
-        memcpy(n, s, len);
-        n[len] = '\0';
-#endif
-        return n;
+        return _rd_allocator._strndup(s, len, _rd_allocator.opaque);
 }
 
+static RD_INLINE RD_UNUSED void rd_free(void *ptr) {
+        _rd_allocator._free(ptr, _rd_allocator.opaque);
+}
 
 
 /*

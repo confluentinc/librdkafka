@@ -7,6 +7,18 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+* Fix `DescribeUserScramCredentials` and `AlterUserScramCredentials` results
+  whose user name or error message could carry trailing bytes read past the
+  end of the field in the response, a crash on a null user name or
+  credentials list, and an invalid free when `DescribeUserScramCredentials`
+  fails with a request-level error (@anabobillo3).
+
+### Consumer fixes
+
+* Fix the member id of a `ConsumerGroupHeartbeat` or `ShareGroupHeartbeat`
+  response being read past the end of the field in the response buffer
+  (@anabobillo3).
+
 ### Producer fixes
 
 * Reject malformed Produce response record-error counts before allocating

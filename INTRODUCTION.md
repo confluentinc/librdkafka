@@ -271,7 +271,7 @@ on the producer:
 
 See [STATISTICS.md](STATISTICS.md) for the full definition of metrics.
 A JSON schema for the statistics is available in
-[statistics-schema.json](src/statistics-schema.json).
+[statistics-schema.json](https://github.com/confluentinc/librdkafka/blob/master/src/statistics-schema.json).
 
 
 <a name="compression"></a>
@@ -833,7 +833,7 @@ automatically.
 librdkafka supports Exactly One Semantics (EOS) as defined in [KIP-98](https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging).
 For more on the use of transactions, see [Transactions in Apache Kafka](https://www.confluent.io/blog/transactions-apache-kafka/).
 
-See [examples/transactions.c](examples/transactions.c) for an example
+See [examples/transactions.c](https://github.com/confluentinc/librdkafka/blob/master/examples/transactions.c) for an example
 transactional EOS application.
 
 **Warning**
@@ -850,7 +850,7 @@ See KIP-447 for more information.
 <a name="documentation"></a>
 ### Documentation
 
-The librdkafka API is documented in the [`rdkafka.h`](src/rdkafka.h)
+The librdkafka API is documented in the [`rdkafka.h`](https://github.com/confluentinc/librdkafka/blob/master/src/rdkafka.h)
 header file, the configuration properties are documented in
 [`CONFIGURATION.md`](CONFIGURATION.md)
 
@@ -1160,7 +1160,7 @@ by setting `enable.ssl.certificate.verification=false`, but this is not
 recommended since it allows for rogue brokers and man-in-the-middle attacks,
 and should only be used for testing and troubleshooting purposes.
 
-CA location probe paths (see [rdkafka_ssl.c](src/rdkafka_ssl.c) for full list)
+CA location probe paths (see [rdkafka_ssl.c](https://github.com/confluentinc/librdkafka/blob/master/src/rdkafka_ssl.c) for full list)
 used when OpenSSL is statically linked:
 
     "/etc/pki/tls/certs/ca-bundle.crt",
@@ -1936,7 +1936,7 @@ be supported in future as well. There are different ways to achieve similar resu
 Even after this if you feel the need to use multiple instances of these APIs for the same consumer
 concurrently, then don't use any of the **seek**, **pause**, **resume** or **rebalancing** operation
 in conjunction with these API calls. For **rebalancing** operation to work in sequencial manner, please
-set `rebalance_cb` configuration property (refer [examples/rdkafka_complex_consumer_example.c](examples/rdkafka_complex_consumer_example.c)
+set `rebalance_cb` configuration property (refer [examples/rdkafka_complex_consumer_example.c](https://github.com/confluentinc/librdkafka/blob/master/examples/rdkafka_complex_consumer_example.c)
 for the help with the usage) for the consumer.
 
 
@@ -1944,7 +1944,7 @@ for the help with the usage) for the consumer.
 ### Share consumers (Queues for Kafka)
 
 > **Preview feature.** The share consumer is provided as a preview. Its public
-> interfaces (the `rd_kafka_share_*` APIs in [rdkafka.h](src/rdkafka.h)) may
+> interfaces (the `rd_kafka_share_*` APIs in [rdkafka.h](https://github.com/confluentinc/librdkafka/blob/master/src/rdkafka.h)) may
 > change in a future release and it is not recommended for production use.
 > See [Current limitations](#share-consumer-current-limitations) below.
 
@@ -1970,7 +1970,7 @@ For a conceptual overview of share groups and Queues for Kafka, see the
 A share consumer is a distinct handle type, `rd_kafka_share_t`, created with
 `rd_kafka_share_consumer_new()` (not `rd_kafka_new()`). The full API reference
 lives in the *Share consumer (Queues for Kafka)* section of
-[rdkafka.h](src/rdkafka.h). The share consumer is currently available through
+[rdkafka.h](https://github.com/confluentinc/librdkafka/blob/master/src/rdkafka.h). The share consumer is currently available through
 the **C API only**; there is no C++ (`rdkafkacpp.h`) wrapper yet.
 
 #### Broker requirement
@@ -2145,9 +2145,9 @@ rd_kafka_share_destroy(rkshare);
 ```
 
 Complete runnable programs are in the examples directory:
-[share_consumer.c](examples/share_consumer.c),
-[share_consumer_commit_sync.c](examples/share_consumer_commit_sync.c) and
-[share_consumer_commit_async.c](examples/share_consumer_commit_async.c).
+[share_consumer.c](https://github.com/confluentinc/librdkafka/blob/master/examples/share_consumer.c),
+[share_consumer_commit_sync.c](https://github.com/confluentinc/librdkafka/blob/master/examples/share_consumer_commit_sync.c) and
+[share_consumer_commit_async.c](https://github.com/confluentinc/librdkafka/blob/master/examples/share_consumer_commit_async.c).
 
 #### Thread safety
 
@@ -2627,7 +2627,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-1082 - Require Client-Generated IDs over the ConsumerGroupHeartbeat  | 4.0.0                       | Supported                                                                                     |
 | KIP-1102 - Enable clients to rebootstrap based on timeout or error code  | 4.0.0                       | Supported                                                                                     |
 | KIP-1139 - Add support for OAuth jwt-bearer grant type                   | 4.1.0 (WIP)                 | Supported                                                                                     |
-| KIP-932 - Queues for Kafka (share groups / share consumer)               | 4.2.0                       | Preview (C API; see the [Share consumers](#share-consumers-queues-for-kafka) usage section and the Share consumer (Queues for Kafka) section in [rdkafka.h](src/rdkafka.h)) |
+| KIP-932 - Queues for Kafka (share groups / share consumer)               | 4.2.0                       | Preview (C API; see the [Share consumers](#share-consumers-queues-for-kafka) usage section and the Share consumer (Queues for Kafka) section in [rdkafka.h](https://github.com/confluentinc/librdkafka/blob/master/src/rdkafka.h)) |
 
 
 

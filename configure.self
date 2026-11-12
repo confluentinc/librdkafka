@@ -226,6 +226,14 @@ int foo (void) {
    return getentropy((void *)seed, sizeof(seed));
 }"
 
+    # Check if fenv.h is available (isn't on uClibc without FENV support)
+    mkl_compile_check "fenv" "HAVE_FENV" disable CC "" \
+"#include <fenv.h>
+int foo (void) {
+   feclearexcept(FE_DIVBYZERO | FE_INVALID);
+   return fetestexcept(FE_DIVBYZERO | FE_INVALID);
+}"
+
     # Check if strndup() is available (isn't on Solaris 10)
     mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
 "#include <string.h>

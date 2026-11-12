@@ -22,6 +22,17 @@ try_compile(
     "${TRYCOMPILE_SRC_DIR}/getentropy_test.c"
 )
 
+set(_fenv_link_libs "")
+if(NOT WIN32)
+    set(_fenv_link_libs "-lm")
+endif()
+try_compile(
+    HAVE_FENV
+    "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+    "${TRYCOMPILE_SRC_DIR}/fenv_test.c"
+    LINK_LIBRARIES ${_fenv_link_libs}
+)
+
 try_compile(
     HAVE_PTHREAD_SETNAME_GNU
     "${CMAKE_CURRENT_BINARY_DIR}/try_compile"

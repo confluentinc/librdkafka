@@ -41,6 +41,7 @@
 #endif
 
 #define __need_IOV_MAX
+#if defined(__sun)
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L /* for timespec on solaris */
 #endif
@@ -48,6 +49,7 @@
 #ifndef _CRT_RAND_S
 #define _CRT_RAND_S  /* for rand_s() on MSVC. It needs to be defined before    \
                       * including <stdlib.h>. */
+#endif
 #endif
 #endif
 

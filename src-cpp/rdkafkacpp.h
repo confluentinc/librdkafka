@@ -2621,6 +2621,16 @@ class RD_EXPORT Queue {
    *         on the final forwarded-to (destination) queue.
    */
   virtual void io_event_enable(int fd, const void *payload, size_t size) = 0;
+
+  /**
+   * @brief Cancels the current rd_kafka_queue_poll() and rd_kafka_consume_callback()
+   * on the queue.
+   *
+   * An application may use this from another thread to force an immediate
+   * return to the calling code (caller of rd_kafka_queue_poll()). Must not
+   * be used from signal handlers since that may cause deadlocks.
+   */
+  virtual void yield() = 0;
 };
 
 /**@}*/

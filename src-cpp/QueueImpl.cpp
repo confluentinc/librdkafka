@@ -68,3 +68,7 @@ void RdKafka::QueueImpl::io_event_enable(int fd,
                                          size_t size) {
   rd_kafka_queue_io_event_enable(queue_, fd, payload, size);
 }
+
+void RdKafka::QueueImpl::yield() {
+  rd_kafka_queue_yield(queue_);
+}

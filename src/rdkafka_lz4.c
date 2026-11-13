@@ -52,7 +52,7 @@ rd_kafka_lz4_decompress_fixup_bad_framing(rd_kafka_broker_t *rkb,
                                           size_t inlen) {
         static const char magic[4] = {0x04, 0x22, 0x4d, 0x18};
         uint8_t FLG, HC, correct_HC;
-        size_t of = 4;
+        size_t of = 4; /* past magic */
 
         /* Format is:
          *    int32_t magic;
@@ -69,7 +69,6 @@ rd_kafka_lz4_decompress_fixup_bad_framing(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
 
-        of  = 4; /* past magic */
         FLG = inbuf[of++];
         of++; /* BD */
 
@@ -112,7 +111,7 @@ rd_kafka_lz4_compress_break_framing(rd_kafka_broker_t *rkb,
                                     size_t outlen) {
         static const char magic[4] = {0x04, 0x22, 0x4d, 0x18};
         uint8_t FLG, HC, bad_HC;
-        size_t of = 4;
+        size_t of = 4; /* past magic */
 
         /* Format is:
          *    int32_t magic;
@@ -129,7 +128,6 @@ rd_kafka_lz4_compress_break_framing(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         }
 
-        of  = 4; /* past magic */
         FLG = outbuf[of++];
         of++; /* BD */
 

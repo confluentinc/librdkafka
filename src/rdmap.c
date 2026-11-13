@@ -219,9 +219,34 @@ void rd_map_clear(rd_map_t *rmap) {
                 rd_map_elem_destroy(rmap, elem);
 }
 
+int rd_map_cmp(rd_map_t *rmapa,
+               rd_map_t *rmapb,
+               int (*cmp_value)(const void *, const void *)) {
+        const rd_map_elem_t *elem;
+
+        if (rmapa->rmap_cnt != rmapb->rmap_cnt)
+                return rmapa->rmap_cnt - rmapb->rmap_cnt;
+
+        RD_MAP_FOREACH_ELEM(elem, rmapa) {
+                void *val2 = rd_map_get(rmapb, elem->key);
+                if (!val2)
+                        return 1;
+                if (cmp_value && cmp_value(elem->value, val2) != 0)
+                        return 1;
+        }
+        return 0;
+}
+
 void rd_map_destroy(rd_map_t *rmap) {
         rd_map_clear(rmap);
         rd_free(rmap->rmap_buckets.p);
+}
+
+void rd_map_destroy_free(void *p) {
+        rd_map_t *rmap = p;
+        rd_map_clear(rmap);
+        rd_free(rmap->rmap_buckets.p);
+        rd_free(rmap);
 }
 
 

@@ -226,6 +226,19 @@ struct rd_map_buckets rd_map_alloc_buckets(size_t expected_cnt);
  */
 void rd_map_clear(rd_map_t *rmap);
 
+/**
+ * @brief Compare two maps.
+ *
+ * @param rmapa First map to compare.
+ * @param rmapb Second map to compare.
+ * @param cmp_value Value comparator that must return 0 if the two values match.
+ *                  When NULL the values are not compared but just the keys.
+ *
+ * @returns 0 if the maps are equal, else a non-zero value.
+ */
+int rd_map_cmp(rd_map_t *rmapa,
+               rd_map_t *rmapb,
+               int(cmp_value)(const void *, const void *));
 
 /**
  * @brief Free all elements in the map and free all memory associated
@@ -237,6 +250,8 @@ void rd_map_clear(rd_map_t *rmap);
  * @sa rd_map_clear()
  */
 void rd_map_destroy(rd_map_t *rmap);
+
+void rd_map_destroy_free(void *p);
 
 
 /**

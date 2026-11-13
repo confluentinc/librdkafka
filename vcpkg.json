@@ -12,7 +12,7 @@
         },
         {
             "name": "openssl",
-            "version>=": "3.6.3#0"
+            "$comment": "Provided by the overlay port in win32/vcpkg-overlay-ports (OpenSSL 3.5 LTS). vcpkg ignores version constraints for overlay ports, so the version is set there."
         },
         {
             "name": "curl",

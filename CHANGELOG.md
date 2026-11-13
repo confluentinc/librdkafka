@@ -7,6 +7,17 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+### Consumer fixes
+
+* A fetched gzip, Snappy or LZ4 compressed MessageSet may now decompress
+  to at most `receive.message.max.bytes`, the limit zstd already used:
+  Snappy and LZ4 declared sizes are checked before allocating. A truncated
+  gzip stream is now a decompression error instead of a busy loop, a
+  MessageSet that decompresses to nothing no longer fails an assertion, and
+  a compressed message inside a compressed MessageSet is refused, as the
+  Java client does. A batch that decompresses to more fails with
+  `_BAD_COMPRESSION`: raise `receive.message.max.bytes` if needed.
+
 ### Producer fixes
 
 * Reject malformed Produce response record-error counts before allocating

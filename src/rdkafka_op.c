@@ -1017,10 +1017,18 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
 
 
 /**
- * Enqueue ERR__THROTTLE op, if desired.
+ * @brief Handle the throttle time \p throttle_time of the response
+ *        \p rkbuf from \p rkb:
+ *        - record it in the broker's stats,
+ *        - throttle the broker (KIP-219), see rd_kafka_broker_throttle(),
+ *        - enqueue ERR__THROTTLE op, if desired.
+ *
+ * @param rkbuf The response, to know the type and version of the request it
+ *              is the response of.
  */
 void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
                                rd_kafka_q_t *rkq,
+                               const rd_kafka_buf_t *rkbuf,
                                int throttle_time) {
         rd_kafka_op_t *rko;
 
@@ -1028,6 +1036,10 @@ void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
                 rd_avg_add(&rkb->rkb_avg_throttle, throttle_time);
                 rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle,
                            throttle_time);
+
+                rd_kafka_broker_throttle(rkb, rkbuf->rkbuf_reqhdr.ApiKey,
+                                         rkbuf->rkbuf_reqhdr.ApiVersion,
+                                         throttle_time);
         }
 
         /* We send throttle events when:

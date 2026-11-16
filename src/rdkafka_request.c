@@ -4064,7 +4064,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(rkbuf, &Throttle_Time);
 
-                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep,
+                rd_kafka_op_throttle_time(rkb, rkb->rkb_rk->rk_rep, rkbuf,
                                           Throttle_Time);
         }
 

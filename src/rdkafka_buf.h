@@ -836,7 +836,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 rd_kafka_buf_read_i32(rkbuf, &_throttle_time_ms);              \
                 rd_kafka_op_throttle_time((rkbuf)->rkbuf_rkb,                  \
                                           (rkbuf)->rkbuf_rkb->rkb_rk->rk_rep,  \
-                                          _throttle_time_ms);                  \
+                                          (rkbuf), _throttle_time_ms);         \
         } while (0)
 
 

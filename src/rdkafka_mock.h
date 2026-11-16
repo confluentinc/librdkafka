@@ -214,6 +214,38 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Push \p cnt throttle times (\c int, in milliseconds) in the \p ...
+ *        va-arg list for the next requests of type \p ApiKey handled by the
+ *        broker, one per request, in order.
+ *
+ * A throttled request is handled as usual and its response is sent right
+ * away, as an Apache Kafka broker does, but it reports the throttle time
+ * (ThrottleTimeMs, if the request version has it) and the broker stops
+ * reading from the connection for that long. This is done whatever the
+ * request version, whether the client is to honor the throttle time or not
+ * (KIP-219).
+ * A throttle time of 0 means the request is not throttled, it consumes its
+ * entry all the same. Independent of the errors and delays pushed with
+ * rd_kafka_mock_broker_push_request_error_rtts().
+ *
+ * @remark A request without a response does not mute the connection, its
+ *         entry is consumed.
+ * @remark A throttled Fetch still returns data, unlike an actual broker.
+ *
+ * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          \c RD_KAFKA_RESP_ERR__UNKNOWN_BROKER if there is no such broker,
+ *          or \c RD_KAFKA_RESP_ERR__INVALID_ARG if \p ApiKey is not handled
+ *          by the mock cluster or a throttle time is negative.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
+                                           int32_t broker_id,
+                                           int16_t ApiKey,
+                                           size_t cnt,
+                                           ...);
+
+
+/**
  * @brief Get the count of errors in the broker's error stack for
  *        the given \p ApiKey.
  *

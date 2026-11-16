@@ -5142,7 +5142,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
 
         /* ---- Error response ---- */
         rd_kafka_mock_buf_write_ThrottleTime(mconn, resp);
-        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        rd_kafka_buf_write_i16(resp, err);                       /* ErrorCode */
         rd_kafka_buf_write_str(resp, rd_kafka_err2str(err), -1); /* ErrorMsg */
         rd_kafka_buf_write_arraycnt(resp, 0); /* Responses (empty) */
         rd_kafka_buf_write_arraycnt(resp, 0); /* NodeEndpoints (empty) */

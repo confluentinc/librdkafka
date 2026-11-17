@@ -2,6 +2,12 @@
 
 ## Fixes
 
+### General fixes
+
+* Fix building the self-contained static library with GNU ar when the
+  source directory path contains a character that ar's script parser
+  rejects, such as the `@` in an npm scoped package path (@maschwenk, #5657).
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

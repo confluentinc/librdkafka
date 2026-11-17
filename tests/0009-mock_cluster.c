@@ -208,6 +208,33 @@ static void do_test_partition_delete_records(void) {
 }
 
 
+static void do_test_auto_created_mock_cluster_destroy(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+
+        SUB_TEST_QUICK();
+
+        test_conf_init(&conf, NULL, 10);
+
+        test_conf_set(conf, "test.mock.num.brokers", "3");
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        mcluster = rd_kafka_handle_mock_cluster(rk);
+        TEST_ASSERT(mcluster, "missing mock cluster");
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+
+        TEST_ASSERT(!rd_kafka_handle_mock_cluster(rk),
+                    "mock cluster pointer should be cleared after "
+                    "rd_kafka_mock_cluster_destroy()");
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
 int main_0009_mock_cluster(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0009_mock_cluster", 1);
         rd_kafka_mock_cluster_t *mcluster;
@@ -267,6 +294,7 @@ int main_0009_mock_cluster(int argc, char **argv) {
 
         do_test_topic_delete();
         do_test_partition_delete_records();
+        do_test_auto_created_mock_cluster_destroy();
 
         return 0;
 }

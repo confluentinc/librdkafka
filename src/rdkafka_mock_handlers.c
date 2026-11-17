@@ -898,9 +898,14 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, 100000);
 
-        if (all_err) {
-                /* Request-level error: a real broker replies with a top-level
-                 * error and an EMPTY topics array (issue #5586). */
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2 &&
+            (all_err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR ||
+             all_err == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE ||
+             all_err == RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS)) {
+                /* Coordinator error: since v2 a real broker replies with a
+                 * top-level error and an EMPTY topics array (#5586).
+                 * Other injected errors keep the per-partition reply, which
+                 * is how a broker returns e.g. UNSTABLE_OFFSET_COMMIT. */
                 int32_t ti;
 
                 /* Response: #Topics = 0 */

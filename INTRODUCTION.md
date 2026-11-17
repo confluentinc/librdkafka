@@ -1763,7 +1763,11 @@ As part of adopting the `consumer` protocol, librdkafka (and derived clients) no
 - **Inside the rebalance callback**, you **must use**:
   - `rd_kafka_incremental_assign(rk, partitions)` to assign partitions
   - `rd_kafka_incremental_unassign(rk, partitions)` to revoke partitions
-- **Do not** use `rd_kafka_assign()` or other assignment APIs in KIP-848.
+- With `group.protocol=consumer` (KIP-848), `rd_kafka_assign()` supports manual
+  assignment only if the consumer has never subscribed. After the first
+  `rd_kafka_subscribe()`, even after `rd_kafka_unsubscribe()`, only
+  `rd_kafka_incremental_assign()` and `rd_kafka_incremental_unassign()` are
+  accepted.
 - **Important:** The `partitions` parameter passed to `rd_kafka_incremental_assign` or `rd_kafka_incremental_unassign` contains only an **incremental list of partitions**—those being added or revoked—rather than the full partition list returned by `rd_kafka_assign(rk, partitions)` in the **range assignor of the classic protocol**, which was the default.
 - All assignors are **sticky**, including `range` (which wasn’t sticky before).
 

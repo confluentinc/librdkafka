@@ -1081,6 +1081,37 @@ restart:
 
 
 /**
+ * @brief KIP-219: Restart the timeout of the requests in \p rkbq as if they
+ *        were enqueued at \p until, the end of the throttle.
+ *
+ * A throttling broker mutes the connection, it reads no request from it
+ * until \p until. The time a request spends behind the mute must not count
+ * against its timeout, or it would time out, the connection would be
+ * torn down, and the next requests would be throttled again.
+ *
+ * The timeout of a request with an absolute timeout, like the
+ * ProduceRequest, is still limited by it.
+ *
+ * @locality broker thread
+ */
+static void rd_kafka_broker_bufq_throttle_extend(rd_kafka_broker_t *rkb,
+                                                 rd_kafka_bufq_t *rkbq,
+                                                 rd_ts_t until) {
+        rd_kafka_buf_t *rkbuf;
+
+        TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
+                rd_ts_t ts_timeout = rkbuf->rkbuf_ts_timeout;
+
+                rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, until);
+
+                /* Never shorten a timeout. */
+                if (rkbuf->rkbuf_ts_timeout < ts_timeout)
+                        rkbuf->rkbuf_ts_timeout = ts_timeout;
+        }
+}
+
+
+/**
  * Scan the wait-response and outbuf queues for message timeouts.
  *
  * Locality: Broker thread
@@ -1088,8 +1119,21 @@ restart:
 static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
         int inflight_cnt, retry_cnt, outq_cnt;
         int partial_cnt = 0;
+        rd_ts_t throttle_until;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+
+        /* KIP-219: Extend the timeout of the requests in outbuf and waitresps
+         * queues while the client is throttled. Requests in the retry queue are
+         * not on the wire, they get a new timeout when they are moved to the
+         * output queue. */
+        throttle_until = rd_kafka_broker_throttle_until(rkb);
+        if (unlikely(throttle_until > now)) {
+                rd_kafka_broker_bufq_throttle_extend(rkb, &rkb->rkb_waitresps,
+                                                     throttle_until);
+                rd_kafka_broker_bufq_throttle_extend(rkb, &rkb->rkb_outbufs,
+                                                     throttle_until);
+        }
 
         /* In-flight requests waiting for response */
         inflight_cnt = rd_kafka_broker_bufq_timeout_scan(

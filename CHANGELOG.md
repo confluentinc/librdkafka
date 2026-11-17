@@ -6,6 +6,13 @@
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
+* Fix the assertion `rkq->rkq_refcnt > 0` failing in `rd_kafka_destroy()`
+  after a `DeleteGroups` or `DeleteConsumerGroupOffsets` request that
+  couldn't be sent to the group coordinator, for example because the broker
+  doesn't support it: the request released its reference to the client's
+  main queue twice. After a few such requests, the queue was freed while the
+  client was still using it, which could crash it.
+  Happening since v1.6.1 (#5679).
 
 ### General fixes
 

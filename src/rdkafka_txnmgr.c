@@ -819,6 +819,8 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
         int retry_backoff_ms                = 500; /* retry backoff */
         rd_kafka_resp_err_t reset_coord_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_bool_t require_bump              = rd_false;
+        /* At least one partition in this response was added */
+        rd_bool_t partition_registered = rd_false;
 
         if (err)
                 goto done;
@@ -885,6 +887,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
                         case RD_KAFKA_RESP_ERR_NO_ERROR:
                                 /* Move rktp from pending to proper list */
                                 rd_kafka_txn_partition_registered(rktp);
+                                partition_registered = rd_true;
                                 break;
 
                                 /* Request-level errors.
@@ -1020,13 +1023,29 @@ done:
 
         case RD_KAFKA_RESP_ERR__TRANSPORT:
         case RD_KAFKA_RESP_ERR__TIMED_OUT:
-        default:
                 /* For these errors we can't be sure if the
                  * request was received by the broker or not,
                  * so increase the txn_req_cnt back up as if
                  * they were received so that and EndTxnRequest
                  * is sent on abort_transaction(). */
                 rk->rk_eos.txn_req_cnt++;
+                actions |= RD_KAFKA_ERR_ACTION_RETRY;
+                break;
+
+        default:
+                /* The broker responded with an error: it did not add
+                 * the failed partitions to the transaction.
+                 * Only count this request if at least one other
+                 * partition in the response was added, otherwise
+                 * abort_transaction() would send an EndTxnRequest for a
+                 * transaction the coordinator never started and fail
+                 * with INVALID_TXN_STATE.
+                 * This matches the AddOffsetsToTxn response handler,
+                 * which only counts __TRANSPORT and __TIMED_OUT.
+                 * Retry, permanent and fatal actions were set per
+                 * partition above. */
+                if (partition_registered)
+                        rk->rk_eos.txn_req_cnt++;
                 actions |= RD_KAFKA_ERR_ACTION_RETRY;
                 break;
         }

@@ -1228,6 +1228,221 @@ static void do_test_txn_req_cnt(void) {
 
 
 /**
+ * @returns the number of \p ApiKey requests received by the mock cluster
+ *          since request tracking was started.
+ */
+static size_t count_mock_requests(rd_kafka_mock_cluster_t *mcluster,
+                                  int16_t ApiKey) {
+        size_t cnt, i, found = 0;
+        rd_kafka_mock_request_t **requests =
+            rd_kafka_mock_get_requests(mcluster, &cnt);
+
+        for (i = 0; i < cnt; i++)
+                if (rd_kafka_mock_request_api_key(requests[i]) == ApiKey)
+                        found++;
+
+        rd_kafka_mock_request_destroy_array(requests, cnt);
+
+        return found;
+}
+
+
+/**
+ * @brief Abort a transaction whose single partition was never added
+ *        because every AddPartitionsToTxn request failed with
+ *        \p err returned by the broker (until the message timed out).
+ *
+ *        The coordinator never started the transaction, so
+ *        abort_transaction() must not send EndTxn: a real broker would
+ *        respond with a fatal INVALID_TXN_STATE.
+ */
+static void do_test_txn_abort_after_addparts_broker_errors(
+    rd_kafka_resp_err_t err) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *txnid = "myTxnId";
+        rd_kafka_resp_err_t errors[1000];
+        size_t i, addparts_cnt, endtxn_cnt;
+
+        SUB_TEST("%s", rd_kafka_err2name(err));
+
+        rk = create_txn_producer(&mcluster, txnid, 3, "message.timeout.ms",
+                                 "2000", NULL);
+
+        /* The message will time out and be purged on abort() */
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        /* Fail AddPartitionsToTxn for longer than message.timeout.ms */
+        for (i = 0; i < RD_ARRAYSIZE(errors); i++)
+                errors[i] = err;
+        rd_kafka_mock_push_request_errors_array(
+            mcluster, RD_KAFKAP_AddPartitionsToTxn, RD_ARRAYSIZE(errors),
+            errors);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+
+        /* Wait for the message to time out */
+        rd_kafka_flush(rk, 10 * 1000);
+
+        /* Let any in-flight AddPartitionsToTxn response arrive */
+        rd_sleep(1);
+
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
+
+        addparts_cnt =
+            count_mock_requests(mcluster, RD_KAFKAP_AddPartitionsToTxn);
+        endtxn_cnt = count_mock_requests(mcluster, RD_KAFKAP_EndTxn);
+
+        TEST_SAY("%" PRIusz " AddPartitionsToTxn and %" PRIusz
+                 " EndTxn requests sent\n",
+                 addparts_cnt, endtxn_cnt);
+
+        TEST_ASSERT(addparts_cnt > 0,
+                    "Expected at least one AddPartitionsToTxn request");
+        TEST_ASSERT(endtxn_cnt == 0,
+                    "Expected no EndTxn request since the coordinator "
+                    "never added a partition, got %" PRIusz,
+                    endtxn_cnt);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Abort a transaction where the first AddPartitionsToTxn request
+ *        timed out locally (the coordinator may have processed it) and
+ *        the following ones failed with a broker error.
+ *
+ *        Since it is unknown whether the coordinator holds the transaction
+ *        abort_transaction() must send EndTxn.
+ */
+static void do_test_txn_abort_after_addparts_timeout(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *txnid = "myTxnId";
+        const int32_t coord_id = 1;
+        rd_kafka_resp_err_t errors[1000];
+        size_t i, endtxn_cnt;
+
+        SUB_TEST();
+
+        rk = create_txn_producer(&mcluster, txnid, 3, "socket.timeout.ms",
+                                 "1000", "message.timeout.ms", "4000", NULL);
+
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid,
+                                      coord_id);
+
+        /* The message will time out and be purged on abort() */
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        /* First AddPartitionsToTxn: delay the response beyond
+         * socket.timeout.ms so that it times out locally. */
+        TEST_CALL_ERR__(rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, coord_id, RD_KAFKAP_AddPartitionsToTxn, 1,
+            RD_KAFKA_RESP_ERR_NO_ERROR, 3000));
+
+        /* Following AddPartitionsToTxn requests fail with a broker error
+         * (broker errors above take precedence over these). */
+        for (i = 0; i < RD_ARRAYSIZE(errors); i++)
+                errors[i] = RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS;
+        rd_kafka_mock_push_request_errors_array(
+            mcluster, RD_KAFKAP_AddPartitionsToTxn, RD_ARRAYSIZE(errors),
+            errors);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+
+        /* Wait for the message to time out */
+        rd_kafka_flush(rk, 10 * 1000);
+
+        /* Let any in-flight AddPartitionsToTxn response arrive */
+        rd_sleep(1);
+
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
+
+        endtxn_cnt = count_mock_requests(mcluster, RD_KAFKAP_EndTxn);
+        TEST_SAY("%" PRIusz " EndTxn requests sent\n", endtxn_cnt);
+        TEST_ASSERT(endtxn_cnt == 1,
+                    "Expected one EndTxn request since the outcome of the "
+                    "timed out AddPartitionsToTxn is unknown, got %" PRIusz,
+                    endtxn_cnt);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Controls for the EndTxn decision on abort:
+ *        an empty transaction sends no EndTxn, a transaction with a
+ *        successfully added partition sends exactly one.
+ */
+static void do_test_txn_abort_endtxn_controls(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *txnid = "myTxnId";
+        size_t endtxn_cnt;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, txnid, 3, NULL);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        /* Empty transaction: no EndTxn */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
+
+        endtxn_cnt = count_mock_requests(mcluster, RD_KAFKAP_EndTxn);
+        TEST_ASSERT(endtxn_cnt == 0,
+                    "Empty transaction: expected no EndTxn, got %" PRIusz,
+                    endtxn_cnt);
+
+        /* Partition added successfully: one EndTxn */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+        test_flush(rk, 5000);
+
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
+
+        endtxn_cnt = count_mock_requests(mcluster, RD_KAFKAP_EndTxn);
+        TEST_ASSERT(endtxn_cnt == 1,
+                    "Registered partition: expected one EndTxn, got %" PRIusz,
+                    endtxn_cnt);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Test abortable errors using mock broker error injections
  *        and code coverage checks.
  */
@@ -4068,6 +4283,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_txn_req_cnt();
 
+        do_test_txn_abort_endtxn_controls();
+
         do_test_txn_requires_abort_errors();
 
         do_test_txn_slow_reinit(rd_false);
@@ -4084,6 +4301,17 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_endtxn_timeout();
 
         do_test_txn_endtxn_timeout_inflight();
+
+        do_test_txn_abort_after_addparts_broker_errors(
+            RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS);
+        do_test_txn_abort_after_addparts_broker_errors(
+            RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
+        do_test_txn_abort_after_addparts_broker_errors(
+            RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
+        do_test_txn_abort_after_addparts_broker_errors(
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+
+        do_test_txn_abort_after_addparts_timeout();
 
         /* Bring down the coordinator */
         do_test_txn_broker_down_in_txn(rd_true);

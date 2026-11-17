@@ -37,9 +37,12 @@
  * group's committed offset before it starts fetching. Since OffsetFetch v2 a
  * broker that is no longer (or not yet) the group coordinator replies with a
  * top-level NOT_COORDINATOR or COORDINATOR_NOT_AVAILABLE and an empty topics
- * array. The partition stayed on the assignment's queried list forever, and
- * a non-empty queried list blocks every later offset query, so the
- * partition was never consumed.
+ * array, and a new coordinator replies the same way with
+ * COORDINATOR_LOAD_IN_PROGRESS while it loads the group's offsets. The
+ * partition stayed on the assignment's queried list forever, and a non-empty
+ * queried list blocks every later offset query, so the partition was never
+ * consumed. A request that got no reply while the assignment changed left the
+ * partition there too.
  */
 
 #define MSGCNT           10
@@ -76,7 +79,13 @@ static void commit_offsets(const char *bootstraps,
 }
 
 
-static rd_kafka_t *create_consumer(const char *bootstraps, const char *group) {
+/**
+ * @brief Create a consumer in \p group, with \p socket_timeout_ms as
+ *        socket.timeout.ms unless it's NULL.
+ */
+static rd_kafka_t *create_consumer(const char *bootstraps,
+                                   const char *group,
+                                   const char *socket_timeout_ms) {
         rd_kafka_conf_t *conf;
 
         test_conf_init(&conf, NULL, 30);
@@ -84,6 +93,10 @@ static rd_kafka_t *create_consumer(const char *bootstraps, const char *group) {
         test_conf_set(conf, "enable.auto.commit", "false");
         /* Fail instead of resetting if the committed offset isn't used. */
         test_conf_set(conf, "auto.offset.reset", "error");
+        /* The backoff check in do_test_coord_err_retried() relies on it. */
+        test_conf_set(conf, "retry.backoff.ms", "100");
+        if (socket_timeout_ms)
+                test_conf_set(conf, "socket.timeout.ms", socket_timeout_ms);
         return test_create_consumer(group, NULL, conf, NULL);
 }
 
@@ -190,7 +203,7 @@ static void do_test_coord_err_retried(rd_kafka_resp_err_t err, int err_cnt) {
 
         rd_kafka_mock_start_request_tracking(mcluster);
 
-        c = create_consumer(bootstraps, topic);
+        c = create_consumer(bootstraps, topic, NULL);
         test_consumer_assign_partition("assign", c, topic, 0,
                                        RD_KAFKA_OFFSET_STORED);
 
@@ -225,18 +238,22 @@ static void do_test_coord_err_retried(rd_kafka_resp_err_t err, int err_cnt) {
 
 
 /**
- * @brief A request-level \p err arrives after the assignment changed, so the
- *        OffsetFetch handler can't retry the request: the queried partition
- *        must go back to the pending list and be queried again, together
- *        with the partition added meanwhile.
+ * @brief The first OffsetFetch request fails with \p err after the assignment
+ *        changed, so the OffsetFetch handler can't retry the request: the
+ *        queried partition must go back to the pending list and be queried
+ *        again, together with the partition added meanwhile.
+ *
+ * @param err is a request-level error, or RD_KAFKA_RESP_ERR__TIMED_OUT for a
+ *            request whose reply comes after it timed out.
  */
-static void do_test_coord_err_assignment_changed(rd_kafka_resp_err_t err) {
+static void do_test_assignment_changed(rd_kafka_resp_err_t err) {
         const char *topic;
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_topic_partition_list_t *parts;
         rd_kafka_t *c;
         test_timing_t t_wait;
+        rd_bool_t timed_out = err == RD_KAFKA_RESP_ERR__TIMED_OUT;
 
         SUB_TEST("%s", rd_kafka_err2name(err));
 
@@ -249,13 +266,23 @@ static void do_test_coord_err_assignment_changed(rd_kafka_resp_err_t err) {
                                  "bootstrap.servers", bootstraps, NULL);
         commit_offsets(bootstraps, topic, topic, 2, COMMITTED_OFFSET);
 
-        /* Delay the failed reply so the assignment can change meanwhile. */
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, 1, RD_KAFKAP_OffsetFetch, 1, err, 1000);
+        if (timed_out)
+                /* Reply after socket.timeout.ms (1500 below), so the request
+                 * times out after the assignment changed. */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 1, RD_KAFKAP_OffsetFetch, 1,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, 4000);
+        else
+                /* Delay the failed reply so the assignment can change
+                 * meanwhile. */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 1, RD_KAFKAP_OffsetFetch, 1, err, 1000);
 
         rd_kafka_mock_start_request_tracking(mcluster);
 
-        c = create_consumer(bootstraps, topic);
+        /* 1500 is the lowest socket.timeout.ms that doesn't warn with the
+         * default fetch.wait.max.ms. */
+        c = create_consumer(bootstraps, topic, timed_out ? "1500" : NULL);
 
         parts = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(parts, topic, 0)->offset =
@@ -290,6 +317,58 @@ static void do_test_coord_err_assignment_changed(rd_kafka_resp_err_t err) {
 }
 
 
+/**
+ * @brief rd_kafka_committed() retries a request-level \p err until it gets
+ *        the committed offset, or returns RD_KAFKA_RESP_ERR__TIMED_OUT once
+ *        its timeout expires.
+ */
+static void do_test_committed(rd_kafka_resp_err_t err) {
+        const char *topic;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_topic_partition_list_t *parts;
+        rd_kafka_t *c;
+        rd_kafka_resp_err_t ret;
+        int j;
+
+        SUB_TEST("%s", rd_kafka_err2name(err));
+
+        topic    = test_mk_topic_name(__FUNCTION__, 1);
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        commit_offsets(bootstraps, topic, topic, 1, COMMITTED_OFFSET);
+
+        c     = create_consumer(bootstraps, topic, NULL);
+        parts = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(parts, topic, 0);
+
+        for (j = 0; j < 3; j++)
+                rd_kafka_mock_push_request_errors(
+                    mcluster, RD_KAFKAP_OffsetFetch, 1, err);
+        TEST_CALL_ERR__(rd_kafka_committed(c, parts, tmout_multip(10000)));
+        TEST_ASSERT(parts->elems[0].offset == COMMITTED_OFFSET,
+                    "Expected committed offset %d, got %" PRId64,
+                    COMMITTED_OFFSET, parts->elems[0].offset);
+
+        /* More errors than requests in the timeout: the backoff starts at
+         * retry.backoff.ms (100) and doubles. */
+        for (j = 0; j < 20; j++)
+                rd_kafka_mock_push_request_errors(
+                    mcluster, RD_KAFKAP_OffsetFetch, 1, err);
+        ret = rd_kafka_committed(c, parts, 1000);
+        TEST_ASSERT(ret == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected rd_kafka_committed() to time out, got %s",
+                    rd_kafka_err2name(ret));
+
+        rd_kafka_topic_partition_list_destroy(parts);
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0193_offsetfetch_not_coord_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -297,10 +376,16 @@ int main_0193_offsetfetch_not_coord_mock(int argc, char **argv) {
         do_test_coord_err_retried(RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 3);
         do_test_coord_err_retried(RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
                                   3);
+        do_test_coord_err_retried(
+            RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS, 3);
 
-        do_test_coord_err_assignment_changed(RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
-        do_test_coord_err_assignment_changed(
-            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE);
+        do_test_assignment_changed(RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
+        do_test_assignment_changed(RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE);
+        do_test_assignment_changed(
+            RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
+        do_test_assignment_changed(RD_KAFKA_RESP_ERR__TIMED_OUT);
+
+        do_test_committed(RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
 
         return 0;
 }

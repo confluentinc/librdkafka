@@ -1,5 +1,14 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Upgrade considerations
+
+* `rd_kafka_committed()` now retries `NOT_COORDINATOR` and
+  `COORDINATOR_NOT_AVAILABLE` until it gets the committed offsets or its
+  timeout expires, as the Java consumer's `committed()` does. Before, it
+  returned the error at once. If the coordinator doesn't answer in time, it
+  now returns `RD_KAFKA_RESP_ERR__TIMED_OUT` (#5589).
+
+
 ## Fixes
 
 ### Admin fixes
@@ -46,12 +55,15 @@
 
 * Issues: #5586.
   Fix assigned partitions that were never consumed when fetching their
-  committed offset failed with `NOT_COORDINATOR` or
-  `COORDINATOR_NOT_AVAILABLE`, as can happen while the group coordinator
-  moves to another broker. The consumer now retries the request, with
-  backoff, against the coordinator it finds, and queries the partitions again
-  if the request can't be retried. Before, the consumer kept the partitions
-  waiting for a reply that never came, until it was restarted (#5589).
+  committed offset failed with `NOT_COORDINATOR`, `COORDINATOR_NOT_AVAILABLE`
+  or `COORDINATOR_LOAD_IN_PROGRESS`, as can happen while the group coordinator
+  moves to another broker, or timed out or lost its connection while the
+  assignment changed. The consumer now retries the request, with backoff,
+  against the coordinator it finds, and queries the partitions again if the
+  request can't be retried. Before, the consumer raised a "Failed to fetch
+  committed offsets" error and kept the partitions waiting for a reply that
+  never came, until they were unassigned or the consumer was restarted.
+  Happening since 1.6.0 (#5589).
 
 
 # librdkafka v2.16.0

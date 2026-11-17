@@ -4270,6 +4270,8 @@ rd_kafka_broker_outbufs_space(rd_kafka_broker_t *rkb) {
  * @param may_send if set to false there is something on the global level
  *                 that prohibits sending messages, such as a transactional
  *                 state.
+ * @param throttled whether the broker has throttled this connection (KIP-219),
+ *                  hold the messages in the partition queue until it ends.
  * @param flushing App is calling flush(): override linger.ms as immediate.
  *
  * @returns the number of messages produced.
@@ -4284,6 +4286,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                                           rd_ts_t *next_wakeup,
                                           rd_bool_t do_timeout_scan,
                                           rd_bool_t may_send,
+                                          rd_bool_t throttled,
                                           rd_bool_t flushing) {
         int cnt = 0;
         int r;
@@ -4363,6 +4366,9 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         } else if (unlikely(rd_kafka_is_transactional(rkb->rkb_rk) &&
                             !rd_kafka_txn_toppar_may_send_msg(rktp))) {
                 /* Partition not registered in transaction yet */
+                max_requests = 0;
+        } else if (unlikely(throttled)) {
+                /* Throttled by the broker */
                 max_requests = 0;
         } else if (max_requests > 0) {
                 /* Move messages from locked partition produce queue
@@ -4576,12 +4582,22 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_ts_t ret_next_wakeup = *next_wakeup;
         rd_kafka_pid_t pid      = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send      = rd_true;
+        rd_bool_t throttled     = rd_false;
         rd_bool_t flushing      = rd_false;
+        rd_ts_t throttle_until;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
         if (unlikely(!rktp))
                 return 0;
+
+        /* KIP-219: while the broker has throttled this connection no
+         * ProduceRequests are created, wake up when the throttle ends. */
+        throttle_until = rd_kafka_broker_throttle_until(rkb);
+        if (unlikely(throttle_until > now)) {
+                throttled = rd_true;
+                rd_kafka_set_next_wakeup(&ret_next_wakeup, throttle_until);
+        }
 
         if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
                 /* Idempotent producer: get a copy of the current pid. */
@@ -4610,7 +4626,7 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
                     rkb, rktp, pid, now, &this_next_wakeup, do_timeout_scan,
-                    may_send, flushing);
+                    may_send, throttled, flushing);
 
                 rd_kafka_set_next_wakeup(&ret_next_wakeup, this_next_wakeup);
 

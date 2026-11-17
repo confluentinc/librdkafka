@@ -2,6 +2,11 @@
 
 ## Fixes
 
+### Consumer fixes
+
+* Bound retries of unsent OffsetCommit requests by the existing consumer-close
+  session budget, while preserving normal response and fatal-error handling.
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

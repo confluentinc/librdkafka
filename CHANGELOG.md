@@ -44,6 +44,15 @@
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
 
+* Issues: #5586.
+  Fix assigned partitions that were never consumed when fetching their
+  committed offset failed with `NOT_COORDINATOR` or
+  `COORDINATOR_NOT_AVAILABLE`, as can happen while the group coordinator
+  moves to another broker. The consumer now retries the request, with
+  backoff, against the coordinator it finds, and queries the partitions again
+  if the request can't be retried. Before, the consumer kept the partitions
+  waiting for a reply that never came, until it was restarted (#5589).
+
 
 # librdkafka v2.16.0
 

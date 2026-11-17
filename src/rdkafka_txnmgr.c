@@ -44,6 +44,9 @@
 
 
 static void rd_kafka_txn_coord_timer_start(rd_kafka_t *rk, int timeout_ms);
+static rd_kafka_op_res_t rd_kafka_txn_op_abort_transaction(rd_kafka_t *rk,
+                                                           rd_kafka_q_t *rkq,
+                                                           rd_kafka_op_t *rko);
 
 #define rd_kafka_txn_curr_api_set_result(rk, actions, error)                   \
         rd_kafka_txn_curr_api_set_result0(__FUNCTION__, __LINE__, rk, actions, \
@@ -800,6 +803,50 @@ static void rd_kafka_txn_partition_registered(rd_kafka_toppar_t *rktp) {
 }
 
 
+/**
+ * @brief Parse an AddPartitionsToTxnResponse only to find out whether the
+ *        coordinator added any partition to the transaction.
+ *
+ * @returns true if at least one partition was added, or if the response
+ *          could not be parsed (the outcome is then unknown).
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static rd_bool_t
+rd_kafka_txn_AddPartitionsToTxn_any_added(rd_kafka_buf_t *rkbuf) {
+        const int log_decode_errors = LOG_ERR;
+        int32_t TopicCnt;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i32(rkbuf, &TopicCnt);
+
+        while (TopicCnt-- > 0) {
+                rd_kafkap_str_t Topic;
+                int32_t PartCnt;
+
+                rd_kafka_buf_read_str(rkbuf, &Topic);
+                rd_kafka_buf_read_i32(rkbuf, &PartCnt);
+
+                while (PartCnt-- > 0) {
+                        int32_t Partition;
+                        int16_t ErrorCode;
+
+                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+                        if (ErrorCode == RD_KAFKA_RESP_ERR_NO_ERROR)
+                                return rd_true;
+                }
+        }
+
+        return rd_false;
+
+err_parse:
+        return rd_true;
+}
+
 
 /**
  * @brief Handle AddPartitionsToTxnResponse
@@ -807,12 +854,12 @@ static void rd_kafka_txn_partition_registered(rd_kafka_toppar_t *rktp) {
  * @locality rdkafka main thread
  * @locks none
  */
-static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
-                                                   rd_kafka_broker_t *rkb,
-                                                   rd_kafka_resp_err_t err,
-                                                   rd_kafka_buf_t *rkbuf,
-                                                   rd_kafka_buf_t *request,
-                                                   void *opaque) {
+static void rd_kafka_txn_handle_AddPartitionsToTxn0(rd_kafka_t *rk,
+                                                    rd_kafka_broker_t *rkb,
+                                                    rd_kafka_resp_err_t err,
+                                                    rd_kafka_buf_t *rkbuf,
+                                                    rd_kafka_buf_t *request,
+                                                    void *opaque) {
         const int log_decode_errors = LOG_ERR;
         int32_t TopicCnt;
         int actions                         = 0;
@@ -828,6 +875,34 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
         rd_kafka_rdlock(rk);
         rd_assert(rk->rk_eos.txn_state !=
                   RD_KAFKA_TXN_STATE_COMMITTING_TRANSACTION);
+
+        if (rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_ABORTABLE_ERROR ||
+            rk->rk_eos.txn_state == RD_KAFKA_TXN_STATE_BEGIN_ABORT) {
+                /* The transaction failed or is being aborted, and
+                 * abort_transaction() has not decided yet whether EndTxn
+                 * is needed.
+                 * Don't register the partitions or retry, but keep this
+                 * request counted if the coordinator added any partition,
+                 * so that EndTxn is sent. */
+                rd_kafka_txn_state_t txn_state = rk->rk_eos.txn_state;
+                rd_kafka_rdunlock(rk);
+
+                if (rd_kafka_txn_AddPartitionsToTxn_any_added(rkbuf)) {
+                        rd_rkb_dbg(rkb, EOS, "ADDPARTS",
+                                   "AddPartitionsToTxn response in state %s: "
+                                   "partition(s) added to the transaction, "
+                                   "EndTxn is required",
+                                   rd_kafka_txn_state2str(txn_state));
+                        return;
+                }
+
+                rd_rkb_dbg(rkb, EOS, "ADDPARTS",
+                           "AddPartitionsToTxn response in state %s: "
+                           "no partitions added to the transaction",
+                           rd_kafka_txn_state2str(txn_state));
+                err = RD_KAFKA_RESP_ERR__OUTDATED;
+                goto done;
+        }
 
         if (rk->rk_eos.txn_state != RD_KAFKA_TXN_STATE_IN_TRANSACTION &&
             rk->rk_eos.txn_state != RD_KAFKA_TXN_STATE_BEGIN_COMMIT) {
@@ -1107,6 +1182,42 @@ done:
 
 
 /**
+ * @brief Handle AddPartitionsToTxnResponse, then continue
+ *        abort_transaction() if it was waiting for this response.
+ *
+ * @locality rdkafka main thread
+ * @locks none
+ */
+static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
+                                                   rd_kafka_broker_t *rkb,
+                                                   rd_kafka_resp_err_t err,
+                                                   rd_kafka_buf_t *rkbuf,
+                                                   rd_kafka_buf_t *request,
+                                                   void *opaque) {
+        rk->rk_eos.txn_addparts_inflight = rd_false;
+
+        rd_kafka_txn_handle_AddPartitionsToTxn0(rk, rkb, err, rkbuf, request,
+                                                opaque);
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY ||
+            !rk->rk_eos.txn_abort_wait_addparts)
+                return;
+
+        /* The request counter now reflects this response:
+         * let abort_transaction() decide whether EndTxn is needed. */
+        rk->rk_eos.txn_abort_wait_addparts = rd_false;
+
+        rd_kafka_dbg(rk, EOS, "TXNABORT",
+                     "AddPartitionsToTxn response handled: "
+                     "continuing abort");
+
+        rd_kafka_q_enq(rk->rk_ops,
+                       rd_kafka_op_new_cb(rk, RD_KAFKA_OP_TXN,
+                                          rd_kafka_txn_op_abort_transaction));
+}
+
+
+/**
  * @brief Send AddPartitionsToTxnRequest to the transaction coordinator.
  *
  * @locality rdkafka main thread
@@ -1195,6 +1306,7 @@ static void rd_kafka_txn_register_partitions(rd_kafka_t *rk) {
         mtx_unlock(&rk->rk_eos.txn_pending_lock);
 
         rk->rk_eos.txn_req_cnt++;
+        rk->rk_eos.txn_addparts_inflight = rd_true;
 
         rd_rkb_dbg(rk->rk_eos.txn_coord, EOS, "ADDPARTS",
                    "Registering partitions with transaction");
@@ -2080,6 +2192,7 @@ static void rd_kafka_txn_complete(rd_kafka_t *rk, rd_bool_t is_commit) {
 
         rk->rk_eos.txn_requires_epoch_bump = rd_false;
         rk->rk_eos.txn_req_cnt             = 0;
+        rk->rk_eos.txn_abort_wait_addparts = rd_false;
 
         rd_kafka_txn_set_state(rk, RD_KAFKA_TXN_STATE_READY);
 }
@@ -2702,6 +2815,22 @@ static rd_kafka_op_res_t rd_kafka_txn_op_abort_transaction(rd_kafka_t *rk,
                  * the abort is still in progress, we still need to wait
                  * for the application to call abort_transaction() again
                  * to synchronize state, and it just did. */
+                rd_kafka_wrunlock(rk);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        if (rk->rk_eos.txn_addparts_inflight) {
+                /* An AddPartitionsToTxn request is still awaiting its
+                 * response: the coordinator may or may not add the
+                 * partitions, so wait for the response before deciding
+                 * whether EndTxn is needed.
+                 * The abort is continued from the AddPartitionsToTxn
+                 * response handler. */
+                rd_kafka_dbg(rk, EOS, "TXNABORT",
+                             "Waiting for in-flight AddPartitionsToTxn "
+                             "response before deciding whether to send "
+                             "EndTxn");
+                rk->rk_eos.txn_abort_wait_addparts = rd_true;
                 rd_kafka_wrunlock(rk);
                 return RD_KAFKA_OP_RES_HANDLED;
         }

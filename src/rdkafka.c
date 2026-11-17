@@ -3929,8 +3929,7 @@ static void rd_kafka_share_record_poll_start(rd_kafka_t *rk, int timeout_ms) {
  * @brief Record the end of a share consume batch.
  *
  *        Enforces max.poll.interval.ms for the share consumer.
- *        Records the last poll time and expedites the next heartbeat if the
- *        interval had been exceeded. Records the poll idle ratio sample
+ *        Records the last poll time. Records the poll idle ratio sample
  *        (pollTime / (pollTime + timeSinceLastPoll), mirroring Java's formula).
  */
 static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
@@ -3938,13 +3937,8 @@ static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
 
         end = rd_clock();
 
-        /* max.poll.interval.ms enforcement: record the poll time and, if the
-         * interval had been exceeded, expedite the next heartbeat to rejoin. */
+        /* max.poll.interval.ms enforcement: record the poll time. */
         rd_atomic64_set(&rk->rk_ts_last_poll, end);
-        if (unlikely(rk->rk_cgrp && rk->rk_cgrp->rkcg_flags &
-                                        RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED))
-                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                    rk->rk_cgrp, "app polled after poll interval exceeded");
 
         /* The remaining work is telemetry sampling only. */
         if (!rk->rk_conf.enable_metrics_push)

@@ -898,6 +898,43 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, 100000);
 
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2 &&
+            (all_err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR ||
+             all_err == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE ||
+             all_err == RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS)) {
+                /* Coordinator error: since v2 a real broker replies with a
+                 * top-level error and an EMPTY topics array (#5586).
+                 * Other injected errors keep the per-partition reply, which
+                 * is how a broker returns e.g. UNSTABLE_OFFSET_COMMIT. */
+                int32_t ti;
+
+                /* Response: #Topics = 0 */
+                rd_kafka_buf_write_arraycnt(resp, 0);
+
+                /* Drain the request body so the wire parser stays in sync. */
+                for (ti = 0; ti < TopicsCnt; ti++) {
+                        rd_kafkap_str_t Topic;
+                        int32_t PartitionCnt;
+
+                        rd_kafka_buf_read_str(rkbuf, &Topic);
+                        rd_kafka_buf_read_arraycnt(rkbuf, &PartitionCnt,
+                                                   100000);
+                        while (PartitionCnt-- > 0) {
+                                int32_t Partition;
+                                rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        }
+                        rd_kafka_buf_skip_tags(rkbuf);
+                }
+
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
+                        /* Response: Outer ErrorCode */
+                        rd_kafka_buf_write_i16(resp, all_err);
+                }
+
+                rd_kafka_mock_connection_send_response(mconn, resp);
+                return 0;
+        }
+
         /* Response: #Topics */
         rd_kafka_buf_write_arraycnt(resp, TopicsCnt);
 

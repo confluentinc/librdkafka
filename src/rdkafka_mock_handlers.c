@@ -891,9 +891,8 @@ static int rd_kafka_mock_handle_OffsetFetch(rd_kafka_mock_connection_t *mconn,
 
         mrkb = rd_kafka_mock_cluster_get_coord(mcluster, RD_KAFKA_COORD_GROUP,
                                                &GroupId);
-        if (!mrkb && !all_err)
-                all_err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;  // FIXME? check if
-                                                              // its this mrkb?
+        if (mrkb != mconn->broker && !all_err)
+                all_err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
 
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, 100000);

@@ -150,27 +150,107 @@ static void consume_from_committed(rd_kafka_t *c, int partition_cnt) {
 
 
 /**
- * @returns the number of tracked OffsetFetch requests, storing up to
- *          \p ts_size of their timestamps (in microseconds) in \p ts.
+ * @returns the number of tracked \p api_key requests, storing up to \p size
+ *          of their timestamps (in microseconds) in \p ts and of the ids of
+ *          the brokers they were sent to in \p broker_ids, each unless NULL.
  */
-static size_t get_offsetfetch_requests(rd_kafka_mock_cluster_t *mcluster,
-                                       int64_t *ts,
-                                       size_t ts_size) {
+static size_t get_requests(rd_kafka_mock_cluster_t *mcluster,
+                           int16_t api_key,
+                           int64_t *ts,
+                           int32_t *broker_ids,
+                           size_t size) {
         rd_kafka_mock_request_t **requests;
         size_t request_cnt, i, cnt = 0;
 
         requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
         for (i = 0; i < request_cnt; i++) {
-                if (rd_kafka_mock_request_api_key(requests[i]) !=
-                    RD_KAFKAP_OffsetFetch)
+                if (rd_kafka_mock_request_api_key(requests[i]) != api_key)
                         continue;
-                if (ts && cnt < ts_size)
+                if (ts && cnt < size)
                         ts[cnt] = rd_kafka_mock_request_timestamp(requests[i]);
+                if (broker_ids && cnt < size)
+                        broker_ids[cnt] = rd_kafka_mock_request_id(requests[i]);
                 cnt++;
         }
         rd_kafka_mock_request_destroy_array(requests, request_cnt);
 
         return cnt;
+}
+
+
+/**
+ * @brief Wait for \p cnt \p api_key requests to reach the cluster.
+ */
+static void
+wait_requests(rd_kafka_mock_cluster_t *mcluster, int16_t api_key, size_t cnt) {
+        test_timing_t t_wait;
+
+        TIMING_START(&t_wait, "WAIT_REQUESTS");
+        while (get_requests(mcluster, api_key, NULL, NULL, 0) < cnt) {
+                TEST_ASSERT(TIMING_DURATION(&t_wait) < 5 * 1000000,
+                            "Fewer than %" PRIusz " %s request(s) sent in 5s",
+                            cnt, rd_kafka_ApiKey2str(api_key));
+                rd_usleep(10 * 1000, 0);
+        }
+        TIMING_STOP(&t_wait);
+}
+
+
+/**
+ * @brief Incrementally assign partition \p partition of \p topic, starting
+ *        from its committed offset, or unassign it if \p unassign is true.
+ */
+static void incremental_assign(rd_kafka_t *c,
+                               const char *topic,
+                               int32_t partition,
+                               rd_bool_t unassign) {
+        rd_kafka_topic_partition_list_t *parts =
+            rd_kafka_topic_partition_list_new(1);
+
+        rd_kafka_topic_partition_list_add(parts, topic, partition)->offset =
+            RD_KAFKA_OFFSET_STORED;
+        if (unassign)
+                test_consumer_incremental_unassign("unassign", c, parts);
+        else
+                test_consumer_incremental_assign("assign", c, parts);
+        rd_kafka_topic_partition_list_destroy(parts);
+}
+
+
+/**
+ * @brief Check that the first tracked OffsetFetch request went to broker 1
+ *        and the last one to broker 2.
+ */
+static void check_offsetfetch_moved(rd_kafka_mock_cluster_t *mcluster) {
+        int32_t broker_ids[16];
+        size_t cnt, i;
+
+        cnt = get_requests(mcluster, RD_KAFKAP_OffsetFetch, NULL, broker_ids,
+                           RD_ARRAYSIZE(broker_ids));
+        TEST_ASSERT(cnt >= 2 && cnt <= RD_ARRAYSIZE(broker_ids),
+                    "Expected 2 to %" PRIusz
+                    " OffsetFetch requests, got %" PRIusz,
+                    RD_ARRAYSIZE(broker_ids), cnt);
+        for (i = 0; i < cnt; i++)
+                TEST_SAY("OffsetFetch #%" PRIusz " sent to broker %" PRId32
+                         "\n",
+                         i, broker_ids[i]);
+        TEST_ASSERT(broker_ids[0] == 1 && broker_ids[cnt - 1] == 2,
+                    "Expected the first OffsetFetch request on broker 1 and "
+                    "the last one on broker 2, got %" PRId32 " and %" PRId32,
+                    broker_ids[0], broker_ids[cnt - 1]);
+}
+
+
+/**
+ * @brief Wait for the coordinator queries of a consumer that just started:
+ *        the first one finds the coordinator and setting it triggers a
+ *        second one. The next one is only sent after
+ *        coordinator.query.interval.ms, so after these two only an error
+ *        makes the consumer look for a new coordinator.
+ */
+static void wait_startup_coord_queries(rd_kafka_mock_cluster_t *mcluster) {
+        wait_requests(mcluster, RD_KAFKAP_FindCoordinator, 2);
 }
 
 
@@ -209,7 +289,8 @@ static void do_test_coord_err_retried(rd_kafka_resp_err_t err, int err_cnt) {
 
         consume_from_committed(c, 1);
 
-        req_cnt = get_offsetfetch_requests(mcluster, ts, RD_ARRAYSIZE(ts));
+        req_cnt = get_requests(mcluster, RD_KAFKAP_OffsetFetch, ts, NULL,
+                               RD_ARRAYSIZE(ts));
         TEST_ASSERT(req_cnt == (size_t)err_cnt + 1,
                     "Expected %d OffsetFetch requests, got %" PRIusz,
                     err_cnt + 1, req_cnt);
@@ -250,9 +331,7 @@ static void do_test_assignment_changed(rd_kafka_resp_err_t err) {
         const char *topic;
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
-        rd_kafka_topic_partition_list_t *parts;
         rd_kafka_t *c;
-        test_timing_t t_wait;
         rd_bool_t timed_out = err == RD_KAFKA_RESP_ERR__TIMED_OUT;
 
         SUB_TEST("%s", rd_kafka_err2name(err));
@@ -284,27 +363,11 @@ static void do_test_assignment_changed(rd_kafka_resp_err_t err) {
          * default fetch.wait.max.ms. */
         c = create_consumer(bootstraps, topic, timed_out ? "1500" : NULL);
 
-        parts = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(parts, topic, 0)->offset =
-            RD_KAFKA_OFFSET_STORED;
-        test_consumer_incremental_assign("assign p0", c, parts);
-        rd_kafka_topic_partition_list_destroy(parts);
-
-        /* Wait for the OffsetFetch of partition 0 to reach the broker. */
-        TIMING_START(&t_wait, "WAIT_OFFSETFETCH");
-        while (get_offsetfetch_requests(mcluster, NULL, 0) == 0) {
-                TEST_ASSERT(TIMING_DURATION(&t_wait) < 5 * 1000000,
-                            "No OffsetFetch request sent in 5s");
-                rd_usleep(10 * 1000, 0);
-        }
-        TIMING_STOP(&t_wait);
+        incremental_assign(c, topic, 0, rd_false);
+        wait_requests(mcluster, RD_KAFKAP_OffsetFetch, 1);
 
         /* Changes the assignment version while the request is in flight. */
-        parts = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(parts, topic, 1)->offset =
-            RD_KAFKA_OFFSET_STORED;
-        test_consumer_incremental_assign("assign p1", c, parts);
-        rd_kafka_topic_partition_list_destroy(parts);
+        incremental_assign(c, topic, 1, rd_false);
 
         consume_from_committed(c, 2);
 
@@ -312,6 +375,165 @@ static void do_test_assignment_changed(rd_kafka_resp_err_t err) {
         test_consumer_close(c);
         rd_kafka_destroy(c);
         test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief While the OffsetFetch request of partition 1 is in flight, the
+ *        partition is unassigned and partition 0 assigned, which sends a
+ *        second request. When the first one then fails with a request-level
+ *        error, partition 0 must not be queried again: the second request,
+ *        still in flight, queries it.
+ */
+static void do_test_assignment_replaced(void) {
+        const char *topic;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_t *c;
+        size_t req_cnt;
+
+        SUB_TEST();
+
+        topic    = test_mk_topic_name(__FUNCTION__, 1);
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 1);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, MSGCNT, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+        test_produce_msgs_easy_v(topic, 0, 1, 0, MSGCNT, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+        commit_offsets(bootstraps, topic, topic, 2, COMMITTED_OFFSET);
+
+        /* The first request fails while the second one is in flight. */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_OffsetFetch, 2,
+            RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 500, RD_KAFKA_RESP_ERR_NO_ERROR,
+            1500);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        c = create_consumer(bootstraps, topic, NULL);
+
+        incremental_assign(c, topic, 1, rd_false);
+        wait_requests(mcluster, RD_KAFKAP_OffsetFetch, 1);
+        incremental_assign(c, topic, 1, rd_true);
+        incremental_assign(c, topic, 0, rd_false);
+        wait_requests(mcluster, RD_KAFKAP_OffsetFetch, 2);
+
+        consume_from_committed(c, 1);
+
+        req_cnt = get_requests(mcluster, RD_KAFKAP_OffsetFetch, NULL, NULL, 0);
+        TEST_ASSERT(req_cnt == 2,
+                    "Expected 2 OffsetFetch requests, got %" PRIusz, req_cnt);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief The group coordinator moves from broker 1 to broker 2 before the
+ *        first OffsetFetch request: broker 1 replies NOT_COORDINATOR, so the
+ *        consumer must query the coordinator again and retry the request on
+ *        broker 2.
+ */
+static void do_test_coord_moves(void) {
+        const char *topic;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_t *c;
+
+        SUB_TEST();
+
+        topic    = test_mk_topic_name(__FUNCTION__, 1);
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_coordinator_set(mcluster, "group", topic, 1);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, MSGCNT, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+        commit_offsets(bootstraps, topic, topic, 1, COMMITTED_OFFSET);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        c = create_consumer(bootstraps, topic, NULL);
+        wait_startup_coord_queries(mcluster);
+
+        rd_kafka_mock_coordinator_set(mcluster, "group", topic, 2);
+
+        test_consumer_assign_partition("assign", c, topic, 0,
+                                       RD_KAFKA_OFFSET_STORED);
+
+        consume_from_committed(c, 1);
+        check_offsetfetch_moved(mcluster);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief The group coordinator moves to a broker that only supports older
+ *        OffsetFetch versions while the first request is in flight. Its
+ *        retry, built for the previous coordinator, can't be sent, so the
+ *        partition must be queried again with a new request.
+ */
+static void do_test_coord_moves_older_version(void) {
+        const char *topic;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_t *c;
+
+        SUB_TEST();
+
+        /* The old coordinator closes the connection if a retry reaches it
+         * after the version change. */
+        test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
+
+        topic    = test_mk_topic_name(__FUNCTION__, 1);
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+        rd_kafka_mock_coordinator_set(mcluster, "group", topic, 1);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, MSGCNT, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+        commit_offsets(bootstraps, topic, topic, 1, COMMITTED_OFFSET);
+
+        /* Delay the reply until the coordinator moved. */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_OffsetFetch, 1,
+            RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 500);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        c = create_consumer(bootstraps, topic, NULL);
+        wait_startup_coord_queries(mcluster);
+        test_consumer_assign_partition("assign", c, topic, 0,
+                                       RD_KAFKA_OFFSET_STORED);
+        wait_requests(mcluster, RD_KAFKAP_OffsetFetch, 1);
+
+        /* The request, in flight, uses OffsetFetch v6: new connections, like
+         * the one to broker 2, now negotiate v5. */
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_OffsetFetch, 0, 5));
+        rd_kafka_mock_coordinator_set(mcluster, "group", topic, 2);
+
+        consume_from_committed(c, 1);
+        check_offsetfetch_moved(mcluster);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+
+        test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();
 }
@@ -384,6 +606,10 @@ int main_0193_offsetfetch_not_coord_mock(int argc, char **argv) {
         do_test_assignment_changed(
             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
         do_test_assignment_changed(RD_KAFKA_RESP_ERR__TIMED_OUT);
+        do_test_assignment_replaced();
+
+        do_test_coord_moves();
+        do_test_coord_moves_older_version();
 
         do_test_committed(RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
 

@@ -5561,6 +5561,7 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
         int i;
         int j;
         rd_kafka_AclBinding_t *acl = NULL;
+        char *res_name             = NULL;
         int16_t error_code;
         rd_kafkap_str_t error_msg;
 
@@ -5587,14 +5588,14 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
         for (i = 0; i < (int)res_cnt; i++) {
                 int8_t res_type = RD_KAFKA_RESOURCE_UNKNOWN;
                 rd_kafkap_str_t kres_name;
-                char *res_name;
                 int8_t resource_pattern_type =
                     RD_KAFKA_RESOURCE_PATTERN_LITERAL;
                 int32_t acl_cnt;
 
                 rd_kafka_buf_read_i8(reply, &res_type);
                 rd_kafka_buf_read_str(reply, &kres_name);
-                RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
+                /* Heap copy: alloca() would grow the stack per resource. */
+                res_name = RD_KAFKAP_STR_DUP(&kres_name);
 
                 if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                         rd_kafka_buf_read_i8(reply, &resource_pattern_type);
@@ -5638,8 +5639,8 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_i8(reply, &permission_type);
                         rd_kafka_buf_skip_tags(reply);
 
-                        RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
-                        RD_KAFKAP_STR_DUPA(&host, &khost);
+                        principal = RD_KAFKAP_STR_DUP(&kprincipal);
+                        host      = RD_KAFKAP_STR_DUP(&khost);
 
                         if (operation <= RD_KAFKA_ACL_OPERATION_UNKNOWN ||
                             operation >= RD_KAFKA_ACL_OPERATION__CNT) {
@@ -5670,9 +5671,16 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
 
                         rd_list_add(&rko_result->rko_u.admin_result.results,
                                     acl);
+
+                        /* AclBinding_new0() made its own copies. */
+                        rd_free(principal);
+                        rd_free(host);
                 }
 
                 rd_kafka_buf_skip_tags(reply);
+
+                rd_free(res_name);
+                res_name = NULL;
         }
 
         *rko_resultp = rko_result;
@@ -5680,6 +5688,7 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
+        rd_free(res_name);
         if (rko_result)
                 rd_kafka_op_destroy(rko_result);
 
@@ -10165,9 +10174,133 @@ static int ut_ListConsumerGroups_response_merge(void) {
         RD_UT_PASS();
 }
 
+
+#ifndef _WIN32
+#include <pthread.h>
+
+/**
+ * @name DescribeAcls response parsing with many ACLs.
+ *
+ * Parsing used to use stack memory proportional to the number of ACLs, which
+ * overflowed small thread stacks (musl, macOS).
+ * @{
+ */
+
+#define UT_ACL_STACK_SIZE   (128 * 1024) /* same as musl default */
+#define UT_ACL_RESOURCES    3000
+#define UT_ACL_PER_RESOURCE 3
+
+typedef struct ut_DescribeAcls_parse_s {
+        rd_kafka_op_t *rko_req;
+        rd_kafka_buf_t *reply;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+        char errstr[256];
+} ut_DescribeAcls_parse_t;
+
+static void *ut_DescribeAcls_parse_thread(void *arg) {
+        ut_DescribeAcls_parse_t *p = arg;
+
+        p->err = rd_kafka_DescribeAclsResponse_parse(
+            p->rko_req, &p->rko_result, p->reply, p->errstr, sizeof(p->errstr));
+        return NULL;
+}
+
+static int ut_DescribeAclsResponse_large(void) {
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            NULL, rd_kafka_DescribeAclsResponse_parse};
+        const int total           = UT_ACL_RESOURCES * UT_ACL_PER_RESOURCE;
+        ut_DescribeAcls_parse_t p = {0};
+        const rd_kafka_AclBinding_t *acl;
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        pthread_attr_t attr;
+        pthread_t thr;
+        char buf[64], last_principal[64];
+        int r, a, cnt;
+
+        RD_UT_SAY("DescribeAcls response with %d ACLs on a %d byte stack",
+                  total, UT_ACL_STACK_SIZE);
+
+        rk  = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+        rkb = rd_kafka_broker_add_logical(rk, "unittest");
+
+        p.reply                          = rd_kafka_buf_new(0, 0);
+        p.reply->rkbuf_rkb               = rkb;
+        p.reply->rkbuf_reqhdr.ApiVersion = 1;
+        /* Like a response received from the network (see
+         * rd_kafka_transport_framed_recv()) keep the whole response in one
+         * contiguous segment so that no string is split across segments. */
+        rd_buf_write_ensure_contig(&p.reply->rkbuf_buf,
+                                   (size_t)UT_ACL_RESOURCES * 150 + 64);
+        rd_kafka_buf_write_i32(p.reply, 0);
+        rd_kafka_buf_write_i16(p.reply, 0);
+        rd_kafka_buf_write_str(p.reply, NULL, -1);
+        rd_kafka_buf_write_arraycnt(p.reply, UT_ACL_RESOURCES);
+        for (r = 0; r < UT_ACL_RESOURCES; r++) {
+                rd_snprintf(buf, sizeof(buf), "topic-%05d", r);
+                rd_kafka_buf_write_i8(p.reply, RD_KAFKA_RESOURCE_TOPIC);
+                rd_kafka_buf_write_str(p.reply, buf, -1);
+                rd_kafka_buf_write_i8(p.reply,
+                                      RD_KAFKA_RESOURCE_PATTERN_LITERAL);
+                rd_kafka_buf_write_arraycnt(p.reply, UT_ACL_PER_RESOURCE);
+                for (a = 0; a < UT_ACL_PER_RESOURCE; a++) {
+                        rd_snprintf(buf, sizeof(buf), "User:principal-%05d-%d",
+                                    r, a);
+                        rd_kafka_buf_write_str(p.reply, buf, -1);
+                        rd_kafka_buf_write_str(p.reply, "10.0.0.1", -1);
+                        rd_kafka_buf_write_i8(p.reply,
+                                              RD_KAFKA_ACL_OPERATION_READ);
+                        rd_kafka_buf_write_i8(
+                            p.reply, RD_KAFKA_ACL_PERMISSION_TYPE_ALLOW);
+                }
+        }
+        rd_slice_init_full(&p.reply->rkbuf_reader, &p.reply->rkbuf_buf);
+
+        p.rko_req = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBEACLS, RD_KAFKA_EVENT_DESCRIBEACLS_RESULT,
+            &cbs, NULL, rk->rk_rep);
+        rd_list_init(&p.rko_req->rko_u.admin_request.args, 0, NULL);
+
+        pthread_attr_init(&attr);
+        rd_assert(pthread_attr_setstacksize(&attr, UT_ACL_STACK_SIZE) == 0);
+        rd_assert(
+            pthread_create(&thr, &attr, ut_DescribeAcls_parse_thread, &p) == 0);
+        pthread_join(thr, NULL);
+        pthread_attr_destroy(&attr);
+
+        RD_UT_ASSERT(!p.err, "parse failed: %s: %s", rd_kafka_err2str(p.err),
+                     p.errstr);
+
+        cnt = rd_list_cnt(&p.rko_result->rko_u.admin_result.results);
+        RD_UT_ASSERT(cnt == total, "expected %d ACLs, got %d", total, cnt);
+
+        acl =
+            rd_list_elem(&p.rko_result->rko_u.admin_result.results, total - 1);
+        rd_snprintf(last_principal, sizeof(last_principal),
+                    "User:principal-%05d-%d", UT_ACL_RESOURCES - 1,
+                    UT_ACL_PER_RESOURCE - 1);
+        RD_UT_ASSERT(!strcmp(acl->principal, last_principal),
+                     "last principal is %s, expected %s", acl->principal,
+                     last_principal);
+
+        rd_kafka_op_destroy(p.rko_result);
+        rd_kafka_op_destroy(p.rko_req);
+        rd_kafka_buf_destroy(p.reply);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**@}*/
+#endif /* !_WIN32 */
+
 int unittest_admin(void) {
         int fails = 0;
         fails += ut_ListConsumerGroups_response_merge();
+#ifndef _WIN32
+        fails += ut_DescribeAclsResponse_large();
+#endif
         return fails;
 }
 

@@ -192,6 +192,61 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
 }
 
 
+/**
+ * @brief Whether the throttle time of a response of type
+ *        \p ApiKey and version \p ApiVersion is to be honored,
+ *        by not sending requests to the broker for that long (KIP-219).
+ *
+ *        Below the boundary versions of the table the broker delays the
+ *        response instead, honoring those would throttle twice.
+ *        APIs not in the table are honored at every version.
+ */
+static RD_UNUSED rd_bool_t
+rd_kafka_ApiVersion_honors_throttle(int16_t ApiKey, int16_t ApiVersion) {
+        switch (ApiKey) {
+        case RD_KAFKAP_Produce:
+                return ApiVersion >= 6;
+        case RD_KAFKAP_Fetch:
+                return ApiVersion >= 8;
+        case RD_KAFKAP_ListOffsets:
+                return ApiVersion >= 3;
+        case RD_KAFKAP_Metadata:
+                return ApiVersion >= 6;
+        case RD_KAFKAP_OffsetCommit:
+        case RD_KAFKAP_OffsetFetch:
+                return ApiVersion >= 4;
+        case RD_KAFKAP_FindCoordinator:
+        case RD_KAFKAP_Heartbeat:
+        case RD_KAFKAP_LeaveGroup:
+        case RD_KAFKAP_SyncGroup:
+        case RD_KAFKAP_DescribeGroups:
+        case RD_KAFKAP_ListGroups:
+        case RD_KAFKAP_ApiVersion:
+        case RD_KAFKAP_DeleteTopics:
+        case RD_KAFKAP_DescribeConfigs:
+                return ApiVersion >= 2;
+        case RD_KAFKAP_JoinGroup:
+        case RD_KAFKAP_CreateTopics:
+                return ApiVersion >= 3;
+        case RD_KAFKAP_DeleteRecords:
+        case RD_KAFKAP_InitProducerId:
+        case RD_KAFKAP_AddPartitionsToTxn:
+        case RD_KAFKAP_AddOffsetsToTxn:
+        case RD_KAFKAP_EndTxn:
+        case RD_KAFKAP_TxnOffsetCommit:
+        case RD_KAFKAP_AlterConfigs:
+        case RD_KAFKAP_CreatePartitions:
+        case RD_KAFKAP_DeleteGroups:
+        case RD_KAFKAP_DescribeAcls:
+        case RD_KAFKAP_CreateAcls:
+        case RD_KAFKAP_DeleteAcls:
+                return ApiVersion >= 1;
+        default:
+                return rd_true;
+        }
+}
+
+
 
 /**
  * @brief ApiKey version support tuple.

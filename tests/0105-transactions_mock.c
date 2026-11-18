@@ -1256,8 +1256,8 @@ static size_t count_mock_requests(rd_kafka_mock_cluster_t *mcluster,
  *        abort_transaction() must not send EndTxn: a real broker would
  *        respond with a fatal INVALID_TXN_STATE.
  */
-static void do_test_txn_abort_after_addparts_broker_errors(
-    rd_kafka_resp_err_t err) {
+static void
+do_test_txn_abort_after_addparts_broker_errors(rd_kafka_resp_err_t err) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         const char *txnid = "myTxnId";
@@ -1277,9 +1277,9 @@ static void do_test_txn_abort_after_addparts_broker_errors(
         /* Fail AddPartitionsToTxn for longer than message.timeout.ms */
         for (i = 0; i < RD_ARRAYSIZE(errors); i++)
                 errors[i] = err;
-        rd_kafka_mock_push_request_errors_array(
-            mcluster, RD_KAFKAP_AddPartitionsToTxn, RD_ARRAYSIZE(errors),
-            errors);
+        rd_kafka_mock_push_request_errors_array(mcluster,
+                                                RD_KAFKAP_AddPartitionsToTxn,
+                                                RD_ARRAYSIZE(errors), errors);
 
         rd_kafka_mock_start_request_tracking(mcluster);
 
@@ -1330,7 +1330,7 @@ static void do_test_txn_abort_after_addparts_broker_errors(
 static void do_test_txn_abort_after_addparts_timeout(void) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
-        const char *txnid = "myTxnId";
+        const char *txnid      = "myTxnId";
         const int32_t coord_id = 1;
         rd_kafka_resp_err_t errors[1000];
         size_t i, endtxn_cnt;
@@ -1340,8 +1340,7 @@ static void do_test_txn_abort_after_addparts_timeout(void) {
         rk = create_txn_producer(&mcluster, txnid, 3, "socket.timeout.ms",
                                  "1000", "message.timeout.ms", "4000", NULL);
 
-        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid,
-                                      coord_id);
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, coord_id);
 
         /* The message will time out and be purged on abort() */
         test_curr->ignore_dr_err = rd_true;
@@ -1358,9 +1357,9 @@ static void do_test_txn_abort_after_addparts_timeout(void) {
          * (broker errors above take precedence over these). */
         for (i = 0; i < RD_ARRAYSIZE(errors); i++)
                 errors[i] = RD_KAFKA_RESP_ERR_CONCURRENT_TRANSACTIONS;
-        rd_kafka_mock_push_request_errors_array(
-            mcluster, RD_KAFKAP_AddPartitionsToTxn, RD_ARRAYSIZE(errors),
-            errors);
+        rd_kafka_mock_push_request_errors_array(mcluster,
+                                                RD_KAFKAP_AddPartitionsToTxn,
+                                                RD_ARRAYSIZE(errors), errors);
 
         rd_kafka_mock_start_request_tracking(mcluster);
 
@@ -1421,8 +1420,7 @@ static void do_test_txn_abort_addparts_inflight(rd_kafka_resp_err_t err,
 
         rk = create_txn_producer(&mcluster, txnid, 3, NULL);
 
-        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid,
-                                      coord_id);
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, coord_id);
 
         /* The message is purged on abort() */
         test_curr->ignore_dr_err = rd_true;
@@ -1448,9 +1446,9 @@ static void do_test_txn_abort_addparts_inflight(rd_kafka_resp_err_t err,
                                    mcluster, RD_KAFKAP_AddPartitionsToTxn) == 0;
              i++)
                 rd_usleep(10 * 1000, 0);
-        TEST_ASSERT(count_mock_requests(mcluster,
-                                        RD_KAFKAP_AddPartitionsToTxn) == 1,
-                    "Expected one AddPartitionsToTxn request in flight");
+        TEST_ASSERT(
+            count_mock_requests(mcluster, RD_KAFKAP_AddPartitionsToTxn) == 1,
+            "Expected one AddPartitionsToTxn request in flight");
 
         if (short_abort_timeout) {
                 /* Times out while waiting for the AddPartitionsToTxn
@@ -1464,10 +1462,9 @@ static void do_test_txn_abort_addparts_inflight(rd_kafka_resp_err_t err,
                 TEST_ASSERT(rd_kafka_error_is_retriable(error),
                             "Expected a retriable error, got %s",
                             rd_kafka_error_string(error));
-                TEST_ASSERT(rd_kafka_error_code(error) ==
-                                RD_KAFKA_RESP_ERR__TIMED_OUT,
-                            "Expected __TIMED_OUT, got %s",
-                            rd_kafka_error_name(error));
+                TEST_ASSERT(
+                    rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "Expected __TIMED_OUT, got %s", rd_kafka_error_name(error));
                 rd_kafka_error_destroy(error);
         }
 

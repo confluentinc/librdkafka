@@ -617,6 +617,17 @@ struct rd_kafka_s {
                                   *   requires an EndTxn request
                                   *   on abort or not. */
 
+                /** An AddPartitionsToTxn request has been sent and its
+                 *  response has not been handled yet.
+                 *  @locality rdkafka main thread */
+                rd_bool_t txn_addparts_inflight;
+
+                /** abort_transaction() is waiting for the response to the
+                 *  in-flight AddPartitionsToTxn request before deciding
+                 *  whether EndTxn is needed.
+                 *  @locality rdkafka main thread */
+                rd_bool_t txn_abort_wait_addparts;
+
                 /**< Timer to trigger registration of pending partitions */
                 rd_kafka_timer_t txn_register_parts_tmr;
 

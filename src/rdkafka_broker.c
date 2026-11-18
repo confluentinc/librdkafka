@@ -7200,6 +7200,116 @@ static int rd_ut_throttle_nodename_update(void) {
 
 
 /**
+ * @brief While the broker throttles the connection, the timeout of the queued
+ *        requests restarts at the end of the throttle: an absolute timeout
+ *        still limits it, and a timeout never gets shorter, whatever the
+ *        number of times or the order in which throttle deadlines are
+ *        applied.
+ *
+ * @sa rd_kafka_broker_bufq_throttle_extend()
+ */
+static int rd_ut_throttle_extend(void) {
+        /* All times are in seconds from the start of the test, with a
+         * socket.timeout.ms of 60 seconds. */
+        static const struct {
+                const char *what;
+                int abs_timeout_s; /**< 0: relative socket.timeout.ms */
+                rd_bool_t force;
+                int set_s;  /**< If not 0, timeout set before the throttle */
+                int exp1_s; /**< Timeout after a throttle ending at 10s */
+                int exp2_s; /**< Timeout after a throttle ending at 15s */
+        } cases[] = {
+            /* socket.timeout.ms from the end of the throttle */
+            {"relative", 0, rd_false, 0, 70, 75},
+            {"absolute, further than socket.timeout.ms", 120, rd_false, 0, 70,
+             75},
+            /* Limited by the absolute timeout */
+            {"absolute, reached by the throttle", 65, rd_false, 0, 65, 65},
+            {"absolute, before the end of the throttle", 5, rd_false, 0, 5, 5},
+            {"absolute, forced", 30, rd_true, 0, 30, 30},
+            /* Never shorter */
+            {"already later", 0, rd_false, 3600, 3600, 3600},
+        };
+        static const struct {
+                const char *what;
+                int until_s;
+                rd_bool_t second_exp; /**< Expect cases[].exp2_s */
+        } steps[] = {
+            {"a throttle", 10, rd_false},
+            {"the same throttle again", 10, rd_false},
+            {"a shorter throttle", 1, rd_false},
+            {"a longer throttle", 15, rd_true},
+        };
+        const rd_ts_t sec = 1000 * 1000;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_bufq_t rkbq;
+        rd_kafka_buf_t *bufs[RD_ARRAYSIZE(cases)];
+        rd_ts_t now;
+        char errstr[256];
+        size_t i, s;
+
+        conf = rd_kafka_conf_new();
+        RD_UT_ASSERT(rd_kafka_conf_set(conf, "socket.timeout.ms", "60000",
+                                       errstr,
+                                       sizeof(errstr)) == RD_KAFKA_CONF_OK,
+                     "%s", errstr);
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rk, "failed to create client: %s", errstr);
+
+        /* A logical broker has no connection to establish. */
+        rkb = rd_kafka_broker_add_logical(rk, "ut_throttle");
+
+        /* A queue of our own, the broker thread does not scan it. */
+        rd_kafka_bufq_init(&rkbq);
+
+        now = rd_clock();
+        for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                bufs[i] =
+                    rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1, 0);
+                if (cases[i].abs_timeout_s)
+                        rd_kafka_buf_set_abs_timeout0(
+                            bufs[i], cases[i].abs_timeout_s * 1000, now,
+                            cases[i].force);
+                /* As when it is enqueued. */
+                rd_kafka_buf_calc_timeout(rk, bufs[i], now);
+                if (cases[i].set_s)
+                        bufs[i]->rkbuf_ts_timeout = now + cases[i].set_s * sec;
+                rd_kafka_bufq_enq(&rkbq, bufs[i]);
+        }
+
+        for (s = 0; s < RD_ARRAYSIZE(steps); s++) {
+                rd_kafka_broker_bufq_throttle_extend(
+                    rkb, &rkbq, now + steps[s].until_s * sec);
+
+                for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                        rd_ts_t exp =
+                            now + (steps[s].second_exp ? cases[i].exp2_s
+                                                       : cases[i].exp1_s) *
+                                      sec;
+                        RD_UT_ASSERT(
+                            bufs[i]->rkbuf_ts_timeout == exp,
+                            "%s request, after %s: expected a "
+                            "timeout at %" PRId64 "ms, got %" PRId64 "ms",
+                            cases[i].what, steps[s].what, (exp - now) / 1000,
+                            (bufs[i]->rkbuf_ts_timeout - now) / 1000);
+                }
+        }
+
+        for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                rd_kafka_bufq_deq(&rkbq, bufs[i]);
+                rd_kafka_buf_destroy(bufs[i]);
+        }
+
+        rd_kafka_broker_destroy(rkb);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
  * @name Unit tests
  * @{
  *
@@ -7213,6 +7323,7 @@ int unittest_broker(void) {
         fails += rd_ut_nodename_to_hostname();
         fails += rd_ut_broker_throttle();
         fails += rd_ut_throttle_nodename_update();
+        fails += rd_ut_throttle_extend();
 
         return fails;
 }

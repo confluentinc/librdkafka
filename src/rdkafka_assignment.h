@@ -51,6 +51,12 @@ typedef struct rd_kafka_assignment_s {
          *  @locks_required none
          *  @locality rdkafka main thread */
         int64_t version;
+        /** Id of the last OffsetFetch request sent, incremented for each
+         *  request. A request is only sent when .queried is empty, so
+         *  .queried only holds the partitions of this request.
+         *  @locks_required none
+         *  @locality rdkafka main thread */
+        int64_t last_query_id;
 } rd_kafka_assignment_t;
 
 

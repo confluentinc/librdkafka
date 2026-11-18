@@ -222,7 +222,7 @@ rd_kafka_resp_err_t rd_kafka_lz4_decompress(rd_kafka_broker_t *rkb,
                            " uncompressed bytes, more than "
                            "receive.message.max.bytes %" PRIusz,
                            Offset, (uint64_t)fi.contentSize, max_size);
-                err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+                err = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
                 goto done;
         }
 
@@ -287,22 +287,15 @@ rd_kafka_resp_err_t rd_kafka_lz4_decompress(rd_kafka_broker_t *rkb,
                 if (unlikely(out_of == outlen)) {
                         char *tmp;
                         /* Grow exponentially with some factor > 1 (using 1.75)
-                         * for amortized O(1) copying, up to max_size */
+                         * for amortized O(1) copying, up to one byte past
+                         * max_size: a frame of max_size bytes may still need
+                         * output space to end (such as for an empty block),
+                         * while one that fills that byte is too large. */
                         size_t extra = RD_MAX(outlen * 3 / 4, 1024);
 
-                        if (unlikely(outlen >= max_size)) {
-                                rd_rkb_dbg(rkb, MSG, "LZ4DEC",
-                                           "Failed to LZ4 (%s HC) decompress "
-                                           "message (offset %" PRId64
-                                           "): output would exceed "
-                                           "receive.message.max.bytes "
-                                           "%" PRIusz,
-                                           proper_hc ? "proper" : "legacy",
-                                           Offset, max_size);
-                                err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
-                                goto done;
-                        }
-                        extra = RD_MIN(extra, max_size - outlen);
+                        if (unlikely(outlen > max_size))
+                                goto too_large;
+                        extra = RD_MIN(extra, max_size + 1 - outlen);
 
                         rd_atomic64_add(&rkb->rkb_c.zbuf_grow, 1);
 
@@ -321,6 +314,9 @@ rd_kafka_resp_err_t rd_kafka_lz4_decompress(rd_kafka_broker_t *rkb,
         }
 
 
+        if (unlikely(out_of > max_size))
+                goto too_large;
+
         if (in_of < inlen) {
                 rd_rkb_dbg(rkb, MSG, "LZ4DEC",
                            "Failed to LZ4 (%s HC) decompress message "
@@ -335,6 +331,15 @@ rd_kafka_resp_err_t rd_kafka_lz4_decompress(rd_kafka_broker_t *rkb,
 
         *outbuf  = out;
         *outlenp = out_of;
+        goto done;
+
+too_large:
+        rd_rkb_dbg(rkb, MSG, "LZ4DEC",
+                   "Failed to LZ4 (%s HC) decompress message "
+                   "(offset %" PRId64
+                   "): output exceeds receive.message.max.bytes %" PRIusz,
+                   proper_hc ? "proper" : "legacy", Offset, max_size);
+        err = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
 
 done:
         code = LZ4F_freeDecompressionContext(dctx);

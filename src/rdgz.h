@@ -33,7 +33,9 @@
  * Simple gzip decompression returning the inflated data
  * in a malloced buffer.
  * 'compressed' must hold one complete gzip or zlib stream that inflates
- * to at most 'max_len' bytes, else NULL is returned.
+ * to at most 'max_len' bytes, else NULL is returned: then
+ * '*decompressed_lenp' is more than 'max_len' if the stream inflates to
+ * more than that.
  * The returned buffer is nul-terminated (the actual allocated length
  * is '*decompressed_lenp'+1).
  *

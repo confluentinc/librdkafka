@@ -92,11 +92,14 @@ void *rd_gz_decompress(const void *compressed,
                        size_t max_len,
                        size_t *decompressed_lenp) {
         char *decompressed;
-        size_t len;
+        size_t len = 0;
 
         /* First pass: calculate the decompressed size. */
-        if (!rd_gz_inflate(compressed, compressed_len, NULL, max_len, &len))
+        if (!rd_gz_inflate(compressed, compressed_len, NULL, max_len, &len)) {
+                /* More than max_len if that is why it failed */
+                *decompressed_lenp = len;
                 return NULL;
+        }
 
         /* For convenience of the caller we nul-terminate
          * the buffer. If it happens to be a string there

@@ -67,7 +67,8 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
                 size_t ret;
                 char *decompressed;
 
-                decompressed = rd_malloc((size_t)out_bufsize);
+                /* At least one byte, as malloc(0) may return NULL */
+                decompressed = rd_malloc((size_t)RD_MAX(out_bufsize, 1));
                 if (!decompressed) {
                         rd_rkb_dbg(rkb, MSG, "ZSTD",
                                    "Unable to allocate output buffer "
@@ -113,7 +114,7 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
                    "output would exceed message.max.bytes (%d)",
                    inlen, out_bufsize, rkb->rkb_rk->rk_conf.max_msg_size);
 
-        return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+        return RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
 }
 
 

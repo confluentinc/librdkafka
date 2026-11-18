@@ -51,7 +51,8 @@
   MessageSet that decompresses to nothing no longer fails an assertion, and
   a compressed message inside a compressed MessageSet is refused, as the
   Java client does. A batch that decompresses to more fails with
-  `_BAD_COMPRESSION`: raise `receive.message.max.bytes` if needed.
+  `MSG_SIZE_TOO_LARGE`, as a message too large to fetch does: raise
+  `receive.message.max.bytes` if needed.
 
 
 # librdkafka v2.16.0

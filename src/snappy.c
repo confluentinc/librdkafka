@@ -1611,10 +1611,14 @@ EXPORT_SYMBOL(rd_kafka_snappy_uncompress);
 /**
  * @brief Decompress Snappy message with Snappy-java framing.
  *
+ * @param max_len the most the chunks may uncompress to, together.
+ * @param outlenp the uncompressed length; on failure, more than \p max_len
+ *        if the chunks would uncompress to more than that.
+ *
  * @returns a malloced buffer with the uncompressed data, or NULL on failure.
  */
 char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
-                                       size_t *outlenp,
+                                       size_t max_len, size_t *outlenp,
                                        char *errstr, size_t errstr_size) {
         int pass;
         char *outbuf = NULL;
@@ -1628,7 +1632,7 @@ char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
 
         for (pass = 1 ; pass <= 2 ; pass++) {
                 ssize_t of = 0;  /* inbuf offset */
-                ssize_t uof = 0; /* outbuf offset */
+                size_t uof = 0;  /* outbuf offset */
 
                 while (of + 4 <= (ssize_t)inlen) {
                         uint32_t clen; /* compressed length */
@@ -1662,6 +1666,15 @@ char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
 
                         if (pass == 1) {
                                 /* pass 1: calculate total length */
+                                if (unlikely(ulen > max_len - uof)) {
+                                        *outlenp = max_len + 1;
+                                        rd_snprintf(errstr, errstr_size,
+                                                    "Snappy-java framed data "
+                                                    "would uncompress to more "
+                                                    "than %"PRIusz" bytes",
+                                                    max_len);
+                                        return NULL;
+                                }
                                 of  += clen;
                                 uof += ulen;
                                 continue;
@@ -1695,7 +1708,7 @@ char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
                 }
 
                 if (pass == 1) {
-                        if (uof <= 0) {
+                        if (uof == 0) {
                                 rd_snprintf(errstr, errstr_size,
                                             "Empty Snappy-java framed data");
                                 return NULL;
@@ -1706,7 +1719,7 @@ char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
                         if (unlikely(!outbuf)) {
                                 rd_snprintf(errstr, errstr_size,
                                            "Failed to allocate memory "
-                                            "(%"PRIdsz") for "
+                                            "(%"PRIusz") for "
                                             "uncompressed Snappy data: %s",
                                             uof, rd_strerror(errno));
                                 return NULL;

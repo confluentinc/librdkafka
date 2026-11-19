@@ -471,6 +471,7 @@ int rd_unittest(void) {
             {"sasl_oauthbearer", unittest_sasl_oauthbearer},
 #endif
             {"aborted_txns", unittest_aborted_txns},
+            {"msgset_decompress", unittest_msgset_decompress},
             {"cgrp", unittest_cgrp},
 #if WITH_SASL_SCRAM
             {"scram", unittest_scram},

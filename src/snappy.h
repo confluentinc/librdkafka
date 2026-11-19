@@ -47,7 +47,7 @@ int rd_kafka_snappy_uncompress_iov(struct iovec *iov_in, int iov_in_len,
 			   size_t input_len, char *uncompressed);
 int rd_kafka_snappy_uncompress(const char *compressed, size_t n, char *uncompressed);
 char *rd_kafka_snappy_java_uncompress (const char *inbuf, size_t inlen,
-                                       size_t *outlenp,
+                                       size_t max_len, size_t *outlenp,
                                        char *errstr, size_t errstr_size);
 int rd_kafka_snappy_compress_iov(struct snappy_env *env,
                                  const struct iovec *iov_in, size_t iov_in_cnt,

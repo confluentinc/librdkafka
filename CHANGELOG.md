@@ -49,6 +49,16 @@
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
 
+* A fetched gzip, Snappy or LZ4 compressed MessageSet may now decompress
+  to at most `receive.message.max.bytes`, the limit zstd already used:
+  Snappy and LZ4 declared sizes are checked before allocating. A truncated
+  gzip stream is now a decompression error instead of a busy loop, a
+  MessageSet that decompresses to nothing no longer fails an assertion, and
+  a compressed message inside a compressed MessageSet is refused, as the
+  Java client does. A batch that decompresses to more fails with
+  `MSG_SIZE_TOO_LARGE`, as a message too large to fetch does: raise
+  `receive.message.max.bytes` if needed.
+
 
 # librdkafka v2.16.0
 

@@ -65,18 +65,25 @@
 #include "rdkafka_partition.h"
 #include "rdkafka_header.h"
 #include "rdkafka_lz4.h"
+#if WITH_LZ4_EXT
+#include <lz4frame.h>
+#else
+#include "lz4frame.h"
+#endif
 
 #include "rdvarint.h"
 #include "crc32c.h"
 
 #if WITH_ZLIB
 #include "rdgz.h"
+#include <zlib.h>
 #endif
 #if WITH_SNAPPY
 #include "snappy.h"
 #endif
 #if WITH_ZSTD
 #include "rdkafka_zstd.h"
+#include <zstd.h>
 #endif
 
 
@@ -125,10 +132,15 @@ typedef struct rd_kafka_msgset_reader_s {
 
         int msetr_relative_offsets; /**< Bool: using relative offsets */
 
+        int msetr_inner; /**< Bool: inner MessageSet of a compressed
+                          *   Message, which must not hold compressed
+                          *   Messages itself. */
+
         /**< Outer/wrapper Message fields. */
         struct {
-                int64_t offset; /**< Relative_offsets: outer message's
-                                 *   Offset (last offset) */
+                int64_t offset; /**< Outer message's Offset (last offset):
+                                 *   relative offsets are converted
+                                 *   from it. */
                 rd_kafka_timestamp_type_t tstype; /**< Compressed
                                                    *   MessageSet's
                                                    *   timestamp type. */
@@ -278,29 +290,36 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
         int codec = Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_buf_t *rkbufz;
+        /* Decompressed data is bounded like a protocol response. */
+        size_t max_size =
+            (size_t)msetr->msetr_rkb->rkb_rk->rk_conf.recv_max_msg_size;
+        char reason[128];
 
         msetr->msetr_compression = codec;
+
+        /* A compressed MessageSet inside another one is refused before
+         * it is read: rd_kafka_msgset_reader_inner_check() */
+        rd_dassert(!msetr->msetr_inner);
 
         switch (codec) {
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP: {
-                uint64_t outlenx = 0;
-
                 /* Decompress Message payload */
-                iov.iov_base = rd_gz_decompress(compressed,
-                                                (int)compressed_size, &outlenx);
+                iov.iov_base = rd_gz_decompress(compressed, compressed_size,
+                                                max_size, &iov.iov_len);
                 if (unlikely(!iov.iov_base)) {
                         rd_rkb_dbg(msetr->msetr_rkb, MSG, "GZIP",
                                    "Failed to decompress Gzip "
                                    "message at offset %" PRId64 " of %" PRIusz
-                                   " bytes: "
-                                   "ignoring message",
-                                   Offset, compressed_size);
-                        err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+                                   " bytes (corrupt, truncated or larger "
+                                   "than receive.message.max.bytes %" PRIusz
+                                   "): ignoring message",
+                                   Offset, compressed_size, max_size);
+                        err = iov.iov_len > max_size
+                                  ? RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE
+                                  : RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                         goto err;
                 }
-
-                iov.iov_len = (size_t)outlenx;
         } break;
 #endif
 
@@ -328,7 +347,8 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
                         inbuf = inbuf + snappy_java_hdrlen;
                         inlen -= snappy_java_hdrlen;
                         iov.iov_base = rd_kafka_snappy_java_uncompress(
-                            inbuf, inlen, &iov.iov_len, errstr, sizeof(errstr));
+                            inbuf, inlen, max_size, &iov.iov_len, errstr,
+                            sizeof(errstr));
 
                         if (unlikely(!iov.iov_base)) {
                                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "SNAPPY",
@@ -341,7 +361,9 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
                                            rktp->rktp_rkt->rkt_topic->str,
                                            rktp->rktp_partition, Offset,
                                            errstr);
-                                err = RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
+                                err = iov.iov_len > max_size
+                                          ? RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE
+                                          : RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
                                 goto err;
                         }
 
@@ -364,8 +386,26 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
                                 goto err;
                         }
 
-                        /* Allocate output buffer for uncompressed data */
-                        iov.iov_base = rd_malloc(iov.iov_len);
+                        if (unlikely(iov.iov_len > max_size)) {
+                                rd_rkb_dbg(msetr->msetr_rkb, MSG, "SNAPPY",
+                                           "Snappy compressed payload "
+                                           "for message at offset %" PRId64
+                                           " (%" PRIusz
+                                           " bytes) would uncompress to "
+                                           "%" PRIusz
+                                           " bytes, more than "
+                                           "receive.message.max.bytes "
+                                           "%" PRIusz ": ignoring message",
+                                           Offset, inlen, iov.iov_len,
+                                           max_size);
+                                err = RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+                                goto err;
+                        }
+
+                        /* Allocate output buffer for uncompressed data,
+                         * at least one byte as malloc(0) may return NULL:
+                         * an empty payload is refused below. */
+                        iov.iov_base = rd_malloc(RD_MAX(iov.iov_len, 1));
                         if (unlikely(!iov.iov_base)) {
                                 rd_rkb_dbg(msetr->msetr_rkb, MSG, "SNAPPY",
                                            "Failed to allocate Snappy "
@@ -438,6 +478,20 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
 
         rd_assert(iov.iov_base);
 
+        if (unlikely(iov.iov_len == 0)) {
+                /* Kafka never writes a compressed MessageSet that
+                 * decompresses to nothing, and no buffer can be read
+                 * from an empty one. */
+                rd_rkb_dbg(msetr->msetr_rkb, MSG, "CODEC",
+                           "%s [%" PRId32 "]: Message at offset %" PRId64
+                           " decompressed to 0 bytes: ignoring message",
+                           rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                           Offset);
+                rd_free(iov.iov_base);
+                err = RD_KAFKA_RESP_ERR__BAD_MSG;
+                goto err;
+        }
+
         /*
          * Decompression successful
          */
@@ -466,13 +520,14 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
                      * support for MsgVersion < 2 */
                     NULL, &msetr->msetr_rkq);
 
-                inner_msetr.msetr_srcname = "compressed ";
+                inner_msetr.msetr_srcname      = "compressed ";
+                inner_msetr.msetr_inner        = 1;
+                inner_msetr.msetr_outer.offset = Offset;
 
                 if (MsgVersion == 1) {
                         /* postproc() will convert relative to
                          * absolute offsets */
                         inner_msetr.msetr_relative_offsets = 1;
-                        inner_msetr.msetr_outer.offset     = Offset;
 
                         /* Apply single LogAppendTime timestamp for
                          * all messages. */
@@ -515,6 +570,17 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
         return err;
 
 err:
+        if (err == RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE)
+                /* As for a message too large to fetch */
+                rd_snprintf(reason, sizeof(reason),
+                            "decompressed size exceeds "
+                            "receive.message.max.bytes (%" PRIusz
+                            "), try increasing receive.message.max.bytes",
+                            max_size);
+        else
+                rd_snprintf(reason, sizeof(reason), "%s",
+                            rd_kafka_err2str(err));
+
         /* Enqueue error messsage:
          * Create op and push on temporary queue. */
         if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
@@ -524,7 +590,7 @@ err:
                     msetr->msetr_tver->version, NULL, rktp, Offset,
                     "Decompression (codec 0x%x) of message at %" PRIu64
                     " of %" PRIusz " bytes failed: %s",
-                    codec, Offset, compressed_size, rd_kafka_err2str(err));
+                    codec, Offset, compressed_size, reason);
                 return err;
         } else {
                 /**
@@ -538,8 +604,7 @@ err:
                             msetr->msetr_tver->version, NULL, rktp, Offset,
                             "Decompression (codec 0x%x) of message at %" PRIu64
                             " of %" PRIusz " bytes failed: %s",
-                            codec, Offset, compressed_size,
-                            rd_kafka_err2str(err));
+                            codec, Offset, compressed_size, reason);
                 } else {
                         /* Share consumer with MessageSet v2: report error for
                          * the entire batch with RELEASE acknowledgement —
@@ -565,7 +630,7 @@ err:
                             "%" PRId64 "-%" PRId64 " of %" PRIusz
                             " bytes failed: %s",
                             codec, msetr->msetr_v2_hdr->BaseOffset, LastOffset,
-                            compressed_size, rd_kafka_err2str(err));
+                            compressed_size, reason);
                 }
         }
 
@@ -1465,6 +1530,73 @@ err_parse:
 
 
 /**
+ * @brief Refuse a compressed Message(Set) of MsgVersion \p MagicByte at the
+ *        read position of the inner MessageSet of a compressed Message.
+ *
+ * Compressed MessageSets do not nest: Kafka never writes one inside
+ * another, and the Java client refuses it too. Each level would recurse
+ * and could multiply the decompressed size once more.
+ *
+ * This runs before the Message(Set) is read, so that no offset filter
+ * skips it, and refuses the whole outer Message: the inner Messages read
+ * before it are dropped, so that none of them is delivered at a wrong
+ * offset or moves the fetch position past the outer Message.
+ *
+ * @returns RD_KAFKA_RESP_ERR__BAD_MSG if refused, else
+ *          RD_KAFKA_RESP_ERR_NO_ERROR (a partial Message(Set) is left to
+ *          its reader).
+ */
+static rd_kafka_resp_err_t
+rd_kafka_msgset_reader_inner_check(rd_kafka_msgset_reader_t *msetr,
+                                   int8_t MagicByte) {
+        rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
+        size_t read_offset = rd_slice_offset(&msetr->msetr_rkbuf->rkbuf_reader);
+        int16_t Attributes;
+
+        /* Attributes follow the MagicByte in MsgVersion v0..1 (int8), and
+         * the Crc after the MagicByte in v2 (int16). */
+        if (MagicByte == 2) {
+                int16_t v;
+                if (!rd_slice_peek(&msetr->msetr_rkbuf->rkbuf_reader,
+                                   read_offset + 8 + 4 + 4 + 1 + 4, &v,
+                                   sizeof(v)))
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                Attributes = (int16_t)be16toh(v);
+        } else {
+                int8_t v;
+                if (!rd_slice_peek(&msetr->msetr_rkbuf->rkbuf_reader,
+                                   read_offset + 8 + 4 + 4 + 1, &v, sizeof(v)))
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                Attributes = v;
+        }
+
+        if (likely(!(Attributes & RD_KAFKA_MSG_ATTR_COMPRESSION_MASK)))
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        rd_rkb_dbg(msetr->msetr_rkb, MSG, "CODEC",
+                   "%s [%" PRId32 "]: Compressed message at offset %" PRId64
+                   " holds a compressed MessageSet: ignoring message",
+                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                   msetr->msetr_outer.offset);
+
+        rd_kafka_q_purge(&msetr->msetr_rkq);
+        msetr->msetr_msgcnt    = 0;
+        msetr->msetr_msg_bytes = 0;
+
+        rd_kafka_consumer_err(&msetr->msetr_rkq, msetr->msetr_broker_id,
+                              RD_KAFKA_RESP_ERR__BAD_MSG,
+                              msetr->msetr_tver->version, NULL, rktp,
+                              msetr->msetr_outer.offset,
+                              "Compressed message at offset %" PRId64
+                              " holds a compressed MessageSet: nested "
+                              "compression is not supported",
+                              msetr->msetr_outer.offset);
+
+        return RD_KAFKA_RESP_ERR__BAD_MSG;
+}
+
+
+/**
  * @brief Parse and read messages from msgset reader buffer.
  */
 static rd_kafka_resp_err_t
@@ -1507,6 +1639,11 @@ rd_kafka_msgset_reader(rd_kafka_msgset_reader_t *msetr) {
                         }
                         continue;
                 }
+
+                if (unlikely(msetr->msetr_inner) &&
+                    (err =
+                         rd_kafka_msgset_reader_inner_check(msetr, MagicByte)))
+                        return err;
 
                 /* Use MsgVersion-specific reader */
                 err = reader[(int)MagicByte](msetr);
@@ -2101,3 +2238,639 @@ int unittest_aborted_txns(void) {
 
         RD_UT_PASS();
 }
+
+
+/**
+ * @name Unit tests for decompressing MessageSets
+ * @{
+ */
+
+/** receive.message.max.bytes of the decompression unit tests */
+#define UT_DECOMPRESS_MAX_SIZE 100000
+
+typedef enum {
+        UT_GZIP,
+        UT_SNAPPY,      /**< Unframed */
+        UT_SNAPPY_JAVA, /**< Snappy-java framing */
+        UT_LZ4,         /**< Uncompressed size not in the frame */
+        UT_LZ4_SIZED,   /**< Uncompressed size in the frame */
+        UT_ZSTD,
+} ut_codec_t;
+
+static const char *ut_codec_names[] = {"gzip", "snappy",      "snappy-java",
+                                       "lz4",  "lz4 (sized)", "zstd"};
+
+static const int ut_codec_attrs[] = {
+    RD_KAFKA_COMPRESSION_GZIP,   RD_KAFKA_COMPRESSION_SNAPPY,
+    RD_KAFKA_COMPRESSION_SNAPPY, RD_KAFKA_COMPRESSION_LZ4,
+    RD_KAFKA_COMPRESSION_LZ4,    RD_KAFKA_COMPRESSION_ZSTD};
+
+/** @brief Write \p v to \p buf as a \p size bytes big-endian integer. */
+static void ut_write_be(char *buf, int64_t v, int size) {
+        uint64_t u = (uint64_t)v;
+        int i;
+
+        for (i = size - 1; i >= 0; i--, u >>= 8)
+                buf[i] = (char)(u & 0xff);
+}
+
+/**
+ * @brief Write a MsgVersion 1 Message with a null Key to \p buf.
+ *
+ * @returns the number of bytes written: 34 + \p value_len.
+ */
+static size_t ut_msg_v1_write(char *buf,
+                              int64_t Offset,
+                              int8_t Attributes,
+                              const char *value,
+                              size_t value_len) {
+        size_t MessageSize = 4 + 1 + 1 + 8 + 4 + 4 + value_len;
+
+        ut_write_be(buf, Offset, 8);
+        ut_write_be(buf + 8, (int64_t)MessageSize, 4);
+        buf[16] = 1; /* MagicByte */
+        buf[17] = (char)Attributes;
+        ut_write_be(buf + 18, 0, 8);  /* Timestamp */
+        ut_write_be(buf + 26, -1, 4); /* Key */
+        ut_write_be(buf + 30, (int64_t)value_len, 4);
+        memcpy(buf + 34, value, value_len);
+        /* The Crc covers the Message from its MagicByte */
+        ut_write_be(buf + 12, rd_crc32(buf + 16, MessageSize - 4), 4);
+
+        return 12 + MessageSize;
+}
+
+/**
+ * @brief Write a MsgVersion 2 Record with a null Key and no Headers to
+ *        \p buf, which must have room for 43 + \p value_len bytes.
+ *
+ * @returns the number of bytes written.
+ */
+static size_t ut_record_v2_write(char *buf,
+                                 int32_t OffsetDelta,
+                                 const char *value,
+                                 size_t value_len) {
+        char hdr[32];
+        size_t hdrlen = 0;
+        size_t of;
+
+        hdr[hdrlen++] = 0;                                 /* Attributes */
+        hdrlen += rd_uvarint_enc_i64(hdr + hdrlen, 10, 0); /* Timestamp */
+        hdrlen += rd_uvarint_enc_i32(hdr + hdrlen, 10, OffsetDelta);
+        hdr[hdrlen++] = 1; /* Key: null (zigzag -1) */
+        hdrlen += rd_uvarint_enc_i64(hdr + hdrlen, 10, (int64_t)value_len);
+
+        /* Length, then the Record, ending with a Headers count of 0 */
+        of = rd_uvarint_enc_i64(buf, 10, (int64_t)(hdrlen + value_len + 1));
+        memcpy(buf + of, hdr, hdrlen);
+        of += hdrlen;
+        memcpy(buf + of, value, value_len);
+        of += value_len;
+        buf[of++] = 0;
+
+        return of;
+}
+
+/**
+ * @returns what a compressed MessageSet of \p MsgVersion decompresses to:
+ *          \p msgcnt uncompressed Messages (v1, at relative offsets 0..)
+ *          or Records (v2), with Values of \p value_len bytes; and its
+ *          size in \p sizep.
+ */
+static char *
+ut_payload_new(int MsgVersion, int msgcnt, size_t value_len, size_t *sizep) {
+        char *value = rd_malloc(value_len);
+        char *buf   = rd_malloc((size_t)msgcnt * (43 + value_len));
+        size_t of   = 0;
+        int i;
+
+        for (i = 0; i < msgcnt; i++) {
+                memset(value, 'a' + (i % 26), value_len);
+                if (MsgVersion == 1)
+                        of += ut_msg_v1_write(buf + of, i, 0, value, value_len);
+                else
+                        of += ut_record_v2_write(buf + of, i, value, value_len);
+        }
+
+        rd_free(value);
+        *sizep = of;
+        return buf;
+}
+
+/**
+ * @returns \p len bytes of \p in compressed as a producer would with
+ *          \p codec, and the compressed size in \p sizep; or NULL if
+ *          compression failed.
+ */
+static char *
+ut_compress(ut_codec_t codec, const char *in, size_t len, size_t *sizep) {
+        char *out = NULL;
+
+        switch (codec) {
+#if WITH_ZLIB
+        case UT_GZIP: {
+                z_stream strm = RD_ZERO_INIT;
+                size_t outsize;
+                int r;
+
+                if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+                                 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK)
+                        return NULL;
+                outsize        = deflateBound(&strm, (uLong)len);
+                out            = rd_malloc(outsize);
+                strm.next_in   = (unsigned char *)in;
+                strm.avail_in  = (uInt)len;
+                strm.next_out  = (unsigned char *)out;
+                strm.avail_out = (uInt)outsize;
+                r              = deflate(&strm, Z_FINISH);
+                *sizep         = strm.total_out;
+                deflateEnd(&strm);
+                if (r != Z_STREAM_END) {
+                        rd_free(out);
+                        return NULL;
+                }
+        } break;
+#endif
+
+#if WITH_SNAPPY
+        case UT_SNAPPY:
+        case UT_SNAPPY_JAVA: {
+                /* snappy-java: magic, version, compatible version, then
+                 * chunks of at most 32 KiB, each its length and its
+                 * Snappy data. */
+                static const char snappy_java_hdr[16] = {
+                    (char)0x82, 'S', 'N', 'A', 'P', 'P', 'Y', 0,
+                    0,          0,   0,   1,   0,   0,   0,   1};
+                rd_bool_t java = codec == UT_SNAPPY_JAVA;
+                size_t chunk   = java ? 32 * 1024 : len;
+                size_t of      = java ? 16 : 0;
+                size_t in_of   = 0;
+                struct snappy_env senv;
+
+                out = rd_malloc(
+                    of +
+                    (len / (32 * 1024) + 1) *
+                        (4 + rd_kafka_snappy_max_compressed_length(chunk)));
+                if (java)
+                        memcpy(out, snappy_java_hdr, 16);
+
+                rd_kafka_snappy_init_env_sg(&senv, 1 /*iov enable*/);
+                do {
+                        size_t n            = RD_MIN(chunk, len - in_of);
+                        struct iovec iov_in = {.iov_base = (void *)(in + in_of),
+                                               .iov_len  = n};
+                        struct iovec iov_out = {
+                            .iov_base = out + of + (java ? 4 : 0),
+                            .iov_len =
+                                rd_kafka_snappy_max_compressed_length(n)};
+
+                        if (rd_kafka_snappy_compress_iov(&senv, &iov_in, 1, n,
+                                                         &iov_out)) {
+                                rd_kafka_snappy_free_env(&senv);
+                                rd_free(out);
+                                return NULL;
+                        }
+                        if (java) {
+                                ut_write_be(out + of, (int64_t)iov_out.iov_len,
+                                            4);
+                                of += 4;
+                        }
+                        of += iov_out.iov_len;
+                        in_of += n;
+                } while (in_of < len);
+                rd_kafka_snappy_free_env(&senv);
+                *sizep = of;
+        } break;
+#endif
+
+        case UT_LZ4:
+        case UT_LZ4_SIZED: {
+                LZ4F_preferences_t prefs = {
+                    .frameInfo = {.blockMode = LZ4F_blockIndependent}};
+                size_t outsize;
+
+                if (codec == UT_LZ4_SIZED)
+                        prefs.frameInfo.contentSize = len;
+                outsize = LZ4F_compressFrameBound(len, &prefs);
+                out     = rd_malloc(outsize);
+                *sizep  = LZ4F_compressFrame(out, outsize, in, len, &prefs);
+                if (LZ4F_isError(*sizep)) {
+                        rd_free(out);
+                        return NULL;
+                }
+        } break;
+
+#if WITH_ZSTD
+        case UT_ZSTD:
+                out = rd_malloc(ZSTD_compressBound(len));
+                *sizep =
+                    ZSTD_compress(out, ZSTD_compressBound(len), in, len, 1);
+                if (ZSTD_isError(*sizep)) {
+                        rd_free(out);
+                        return NULL;
+                }
+                break;
+#endif
+
+        default:
+                RD_NOTREACHED();
+        }
+
+        return out;
+}
+
+/**
+ * @returns a compressed MessageSet of \p MsgVersion: a v1 Message or a v2
+ *          RecordBatch with \p Attributes, \p msgcnt messages and
+ *          \p z as its compressed Value or Records; its size in \p sizep.
+ */
+static char *ut_msgset_new(int MsgVersion,
+                           int8_t Attributes,
+                           int msgcnt,
+                           const char *z,
+                           size_t zsize,
+                           size_t *sizep) {
+        char *buf = rd_malloc(61 + zsize);
+
+        if (MsgVersion == 1) {
+                /* The Offset of the last inner Message */
+                *sizep = ut_msg_v1_write(buf, msgcnt - 1, Attributes, z, zsize);
+                return buf;
+        }
+
+        ut_write_be(buf, 0, 8);                         /* BaseOffset */
+        ut_write_be(buf + 8, (int64_t)(49 + zsize), 4); /* Length */
+        ut_write_be(buf + 12, 0, 4); /* PartitionLeaderEpoch */
+        buf[16] = 2;                 /* MagicByte */
+        ut_write_be(buf + 21, Attributes, 2);
+        ut_write_be(buf + 23, msgcnt - 1, 4); /* LastOffsetDelta */
+        ut_write_be(buf + 27, 0, 8);          /* BaseTimestamp */
+        ut_write_be(buf + 35, 0, 8);          /* MaxTimestamp */
+        ut_write_be(buf + 43, -1, 8);         /* ProducerId */
+        ut_write_be(buf + 51, -1, 2);         /* ProducerEpoch */
+        ut_write_be(buf + 53, -1, 4);         /* BaseSequence */
+        ut_write_be(buf + 57, msgcnt, 4);     /* RecordCount */
+        memcpy(buf + 61, z, zsize);
+        /* The Crc (CRC-32C) covers the batch from its Attributes */
+        ut_write_be(buf + 17, rd_crc32c(0, buf + 21, 40 + zsize), 4);
+
+        *sizep = 61 + zsize;
+        return buf;
+}
+
+/**
+ * @brief Parse the MessageSet \p buf of \p size bytes (freed here) at the
+ *        fetch position \p *fetch_offsetp, which returns the fetch
+ *        position after it (NULL: no fetch position).
+ *
+ * @returns the number of messages on the partition's fetch queue, and the
+ *          first error there in \p errp and its offset in \p err_offsetp
+ *          (if not NULL).
+ */
+static int ut_msgset_parse0(rd_kafka_t *rk,
+                            char *buf,
+                            size_t size,
+                            int64_t *fetch_offsetp,
+                            rd_kafka_resp_err_t *errp,
+                            int64_t *err_offsetp) {
+        rd_kafka_topic_t *rkt   = rd_kafka_topic_new(rk, "ut_decompress", NULL);
+        rd_kafka_toppar_t *rktp = rd_kafka_toppar_new(rkt, 0);
+        struct rd_kafka_toppar_ver tver = {.rktp = rktp, .version = 1};
+        rd_kafka_buf_t *rkbuf = rd_kafka_buf_new_shadow(buf, size, rd_free);
+        rd_kafka_op_t *rko;
+        int msgcnt = 0;
+
+        if (fetch_offsetp)
+                rktp->rktp_offsets.fetch_pos.offset = *fetch_offsetp;
+
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rk);
+        rd_kafka_msgset_parse(rkbuf, NULL, rktp, NULL, &tver);
+        rd_kafka_buf_destroy(rkbuf);
+
+        if (fetch_offsetp)
+                *fetch_offsetp = rktp->rktp_offsets.fetch_pos.offset;
+
+        *errp = RD_KAFKA_RESP_ERR_NO_ERROR;
+        while ((rko = rd_kafka_q_pop(rktp->rktp_fetchq, RD_POLL_NOWAIT, 0))) {
+                if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                        msgcnt++;
+                else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR && !*errp) {
+                        *errp = rko->rko_err;
+                        if (err_offsetp)
+                                *err_offsetp = rko->rko_u.err.offset;
+                }
+                rd_kafka_op_destroy(rko);
+        }
+
+        rd_kafka_toppar_destroy(rktp);
+        rd_kafka_topic_destroy(rkt);
+
+        return msgcnt;
+}
+
+/**
+ * @brief Parse the MessageSet \p buf of \p size bytes (freed here).
+ *
+ * @returns the number of messages on the partition's fetch queue, and the
+ *          first error there in \p errp.
+ */
+static int ut_msgset_parse(rd_kafka_t *rk,
+                           char *buf,
+                           size_t size,
+                           rd_kafka_resp_err_t *errp) {
+        return ut_msgset_parse0(rk, buf, size, NULL, errp, NULL);
+}
+
+/**
+ * @brief A compressed MessageSet is read when it decompresses to at most
+ *        receive.message.max.bytes, and refused when it decompresses to
+ *        more, as a message too large to fetch is (MSG_SIZE_TOO_LARGE).
+ */
+static int ut_decompress_max_size(rd_kafka_t *rk, ut_codec_t codec) {
+        /* Within the limit, at it and one byte beyond it (v1: a Message
+         * is its Value and 34 bytes), and far beyond it. */
+        static const struct {
+                int msgcnt;
+                size_t value_len;
+        } cases[] = {{10, 1000},
+                     {1, UT_DECOMPRESS_MAX_SIZE - 34},
+                     {1, UT_DECOMPRESS_MAX_SIZE - 33},
+                     {200, 1000}};
+        int MsgVersion;
+        int i;
+
+        RD_UT_BEGIN();
+
+        for (MsgVersion = 1; MsgVersion <= 2; MsgVersion++) {
+                for (i = 0; i < (int)RD_ARRAYSIZE(cases); i++) {
+                        int msgcnt = cases[i].msgcnt;
+                        rd_kafka_resp_err_t err;
+                        size_t size, zsize, msgset_size;
+                        char *payload, *z, *msgset;
+                        int got;
+
+                        payload = ut_payload_new(MsgVersion, msgcnt,
+                                                 cases[i].value_len, &size);
+                        z       = ut_compress(codec, payload, size, &zsize);
+                        RD_UT_ASSERT(z, "%s: compression failed",
+                                     ut_codec_names[codec]);
+                        RD_UT_ASSERT(zsize < UT_DECOMPRESS_MAX_SIZE / 4,
+                                     "%s: %" PRIusz " compressed bytes",
+                                     ut_codec_names[codec], zsize);
+
+                        msgset =
+                            ut_msgset_new(MsgVersion, ut_codec_attrs[codec],
+                                          msgcnt, z, zsize, &msgset_size);
+                        got = ut_msgset_parse(rk, msgset, msgset_size, &err);
+
+                        if (size <= UT_DECOMPRESS_MAX_SIZE)
+                                RD_UT_ASSERT(got == msgcnt && !err,
+                                             "%s v%d: %" PRIusz
+                                             " bytes: expected %d messages, "
+                                             "got %d and error %s",
+                                             ut_codec_names[codec], MsgVersion,
+                                             size, msgcnt, got,
+                                             rd_kafka_err2name(err));
+                        else
+                                RD_UT_ASSERT(
+                                    got == 0 &&
+                                        err ==
+                                            RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
+                                    "%s v%d: %" PRIusz
+                                    " bytes: expected MSG_SIZE_TOO_LARGE, "
+                                    "got %d messages and error %s",
+                                    ut_codec_names[codec], MsgVersion, size,
+                                    got, rd_kafka_err2name(err));
+
+                        rd_free(z);
+                        rd_free(payload);
+                }
+        }
+
+        RD_UT_PASS();
+}
+
+#if WITH_ZLIB
+/**
+ * @brief A gzip stream that ends early is refused.
+ */
+static int ut_decompress_gzip_truncated(rd_kafka_t *rk) {
+        size_t size, zsize, msgset_size;
+        char *payload, *z, *msgset;
+        rd_kafka_resp_err_t err;
+        int got;
+
+        RD_UT_BEGIN();
+
+        payload = ut_payload_new(1, 10, 1000, &size);
+        z       = ut_compress(UT_GZIP, payload, size, &zsize);
+        RD_UT_ASSERT(z, "compression failed");
+
+        msgset = ut_msgset_new(1, RD_KAFKA_COMPRESSION_GZIP, 10, z, zsize / 2,
+                               &msgset_size);
+        got    = ut_msgset_parse(rk, msgset, msgset_size, &err);
+        RD_UT_ASSERT(got == 0 && err == RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
+                     "expected _BAD_COMPRESSION, got %d messages and error %s",
+                     got, rd_kafka_err2name(err));
+
+        rd_free(z);
+        rd_free(payload);
+
+        RD_UT_PASS();
+}
+#endif
+
+/**
+ * @brief A compressed MessageSet that decompresses to nothing is refused.
+ */
+static int ut_decompress_empty(rd_kafka_t *rk, ut_codec_t codec) {
+        size_t zsize, msgset_size;
+        char *z, *msgset;
+        rd_kafka_resp_err_t err;
+        int got;
+
+        RD_UT_BEGIN();
+
+        z = ut_compress(codec, "", 0, &zsize);
+        RD_UT_ASSERT(z, "%s: compression failed", ut_codec_names[codec]);
+
+        msgset =
+            ut_msgset_new(1, ut_codec_attrs[codec], 1, z, zsize, &msgset_size);
+        got = ut_msgset_parse(rk, msgset, msgset_size, &err);
+        RD_UT_ASSERT(got == 0 && err == RD_KAFKA_RESP_ERR__BAD_MSG,
+                     "%s: expected _BAD_MSG, got %d messages and error %s",
+                     ut_codec_names[codec], got, rd_kafka_err2name(err));
+
+        rd_free(z);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief An LZ4 frame that decompresses to receive.message.max.bytes is
+ *        read also when the block that fills the output is followed by one
+ *        that decompresses to nothing.
+ */
+static int ut_decompress_lz4_empty_block(rd_kafka_t *rk) {
+        /* A compressed block of one byte (a token with no literals and no
+         * match), then the EndMark */
+        static const char tail[] = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+        ut_codec_t codec;
+
+        RD_UT_BEGIN();
+
+        for (codec = UT_LZ4; codec <= UT_LZ4_SIZED; codec++) {
+                size_t size, zsize, msgset_size;
+                char *payload, *z, *msgset;
+                rd_kafka_resp_err_t err;
+                int got;
+
+                payload =
+                    ut_payload_new(1, 1, UT_DECOMPRESS_MAX_SIZE - 34, &size);
+                z = ut_compress(codec, payload, size, &zsize);
+                RD_UT_ASSERT(z, "%s: compression failed",
+                             ut_codec_names[codec]);
+
+                /* Replace the EndMark (no content checksum) */
+                z = rd_realloc(z, zsize - 4 + sizeof(tail));
+                memcpy(z + zsize - 4, tail, sizeof(tail));
+                zsize += sizeof(tail) - 4;
+
+                msgset = ut_msgset_new(1, ut_codec_attrs[codec], 1, z, zsize,
+                                       &msgset_size);
+                got    = ut_msgset_parse(rk, msgset, msgset_size, &err);
+                RD_UT_ASSERT(got == 1 && !err,
+                             "%s: expected 1 message, got %d and error %s",
+                             ut_codec_names[codec], got,
+                             rd_kafka_err2name(err));
+
+                rd_free(z);
+                rd_free(payload);
+        }
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief A compressed Message or RecordBatch inside a compressed MessageSet
+ *        refuses the whole outer Message, at any fetch position: the
+ *        inner Message read before it is not delivered, the error is at the
+ *        outer Message's offset, and the fetch position does not move.
+ */
+static int ut_decompress_nested(rd_kafka_t *rk) {
+        static const int64_t fetch_offsets[] = {0, 100};
+        int NestedVersion;
+        int i;
+
+        RD_UT_BEGIN();
+
+        for (NestedVersion = 1; NestedVersion <= 2; NestedVersion++) {
+                for (i = 0; i < (int)RD_ARRAYSIZE(fetch_offsets); i++) {
+                        size_t size, zsize, nested_size, inner_size,
+                            zinner_size, msgset_size;
+                        char *payload, *z, *nested, *inner, *zinner, *msgset;
+                        int64_t fetch_offset = fetch_offsets[i];
+                        int64_t err_offset   = -1;
+                        rd_kafka_resp_err_t err;
+                        int got;
+
+                        /* An LZ4 compressed Message (v1) or RecordBatch
+                         * (v2) of 10 messages, at relative offset 1 ... */
+                        payload = ut_payload_new(NestedVersion, 10, 100, &size);
+                        z       = ut_compress(UT_LZ4, payload, size, &zsize);
+                        RD_UT_ASSERT(z, "compression failed");
+                        nested = ut_msgset_new(NestedVersion,
+                                               RD_KAFKA_COMPRESSION_LZ4, 10, z,
+                                               zsize, &nested_size);
+                        ut_write_be(nested, 1, 8); /* Offset, BaseOffset */
+
+                        /* ... after an uncompressed Message at relative
+                         * offset 0, in the inner MessageSet of an LZ4
+                         * compressed Message at offset 101. */
+                        inner      = rd_malloc(35 + nested_size);
+                        inner_size = ut_msg_v1_write(inner, 0, 0, "a", 1);
+                        memcpy(inner + inner_size, nested, nested_size);
+                        inner_size += nested_size;
+                        zinner = ut_compress(UT_LZ4, inner, inner_size,
+                                             &zinner_size);
+                        RD_UT_ASSERT(zinner, "compression failed");
+                        msgset      = rd_malloc(34 + zinner_size);
+                        msgset_size = ut_msg_v1_write(msgset, 101,
+                                                      RD_KAFKA_COMPRESSION_LZ4,
+                                                      zinner, zinner_size);
+
+                        got =
+                            ut_msgset_parse0(rk, msgset, msgset_size,
+                                             &fetch_offset, &err, &err_offset);
+                        RD_UT_ASSERT(
+                            got == 0 && err == RD_KAFKA_RESP_ERR__BAD_MSG &&
+                                err_offset == 101 &&
+                                fetch_offset == fetch_offsets[i],
+                            "v%d nested at fetch offset %" PRId64
+                            ": expected _BAD_MSG at offset 101, no messages "
+                            "and the same fetch offset, got %d messages, "
+                            "error %s at offset %" PRId64
+                            " and fetch offset %" PRId64,
+                            NestedVersion, fetch_offsets[i], got,
+                            rd_kafka_err2name(err), err_offset, fetch_offset);
+
+                        rd_free(zinner);
+                        rd_free(inner);
+                        rd_free(nested);
+                        rd_free(z);
+                        rd_free(payload);
+                }
+        }
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Unit tests for decompressing MessageSets.
+ */
+int unittest_msgset_decompress(void) {
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        char max_size[16];
+        char errstr[256];
+        rd_kafka_t *rk;
+        int fails = 0;
+
+        /* The smallest message.max.bytes and fetch.max.bytes let
+         * receive.message.max.bytes be small. */
+        rd_snprintf(max_size, sizeof(max_size), "%d", UT_DECOMPRESS_MAX_SIZE);
+        if (rd_kafka_conf_set(conf, "message.max.bytes", "1000", errstr,
+                              sizeof(errstr)) ||
+            rd_kafka_conf_set(conf, "fetch.max.bytes", "1000", errstr,
+                              sizeof(errstr)) ||
+            rd_kafka_conf_set(conf, "receive.message.max.bytes", max_size,
+                              errstr, sizeof(errstr)))
+                RD_UT_FAIL("%s", errstr);
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rk, "%s", errstr);
+
+#if WITH_ZLIB
+        fails += ut_decompress_max_size(rk, UT_GZIP);
+        fails += ut_decompress_gzip_truncated(rk);
+        fails += ut_decompress_empty(rk, UT_GZIP);
+#endif
+#if WITH_SNAPPY
+        fails += ut_decompress_max_size(rk, UT_SNAPPY);
+        fails += ut_decompress_max_size(rk, UT_SNAPPY_JAVA);
+        fails += ut_decompress_empty(rk, UT_SNAPPY);
+#endif
+        fails += ut_decompress_max_size(rk, UT_LZ4);
+        fails += ut_decompress_max_size(rk, UT_LZ4_SIZED);
+        fails += ut_decompress_empty(rk, UT_LZ4_SIZED);
+        fails += ut_decompress_lz4_empty_block(rk);
+#if WITH_ZSTD
+        fails += ut_decompress_max_size(rk, UT_ZSTD);
+        fails += ut_decompress_empty(rk, UT_ZSTD);
+#endif
+        fails += ut_decompress_nested(rk);
+
+        rd_kafka_destroy(rk);
+
+        return fails;
+}
+
+/**@}*/

@@ -452,6 +452,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Maximum Kafka protocol response message size. "
      "This serves as a safety precaution to avoid memory exhaustion in "
      "case of protocol hickups. "
+     "It is also the most a fetched compressed MessageSet may "
+     "decompress to. "
      "This value must be at least `fetch.max.bytes`  + 512 to allow "
      "for protocol overhead; the value is adjusted automatically "
      "unless the configuration property is explicitly set. For share "

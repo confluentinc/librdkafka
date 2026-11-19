@@ -2,6 +2,11 @@
 
 ## Fixes
 
+### General fixes
+
+* Fix the bundled zlib being built without optimisation, which slowed down
+  gzip compression in self-contained builds. Happening since 1.4.0 (#5673).
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

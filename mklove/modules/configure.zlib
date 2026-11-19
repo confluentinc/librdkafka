@@ -53,7 +53,7 @@ function install_source {
             "$checksum" || return 1
     fi
 
-    CFLAGS=-fPIC ./configure --static --prefix=/usr
+    CFLAGS="-O3 -fPIC" ./configure --static --prefix=/usr
     make -j
     make test
     make DESTDIR="${destdir}" install

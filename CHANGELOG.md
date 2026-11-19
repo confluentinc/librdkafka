@@ -7,6 +7,12 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+* Remove the ignored top-level `const` qualifier from the return type of
+  `rd_kafka_TopicPartitionInfo_partition()`. It made `rdkafka.h` trigger
+  `-Wignored-qualifiers` (enabled by `-Wextra`), so applications building with
+  `-Wextra -Werror` failed to compile just by including the header
+  (#5661).
+
 ### General fixes
 
 * Issues: #5630.

@@ -7,6 +7,14 @@
 * Fix the bundled zlib being built without optimisation, which slowed down
   gzip compression in self-contained builds. Happening since 1.4.0 (#5673).
 
+* Fix an all-topics Metadata request (v9 and later) carrying 3 extra bytes
+  between the request header and the `AllowAutoTopicCreation` field: the
+  null topics array was sent as its 4-byte placeholder instead of a single
+  `0x00` byte, shifting every following field. Brokers that ignore bytes left
+  over after parsing a request accepted it, while stricter receivers could
+  reject the request or close the connection. The placeholder is now shrunk
+  the same way as for other flexible-version arrays.
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

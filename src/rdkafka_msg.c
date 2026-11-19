@@ -1719,7 +1719,12 @@ void rd_kafka_msgbatch_ready_produce(rd_kafka_msgbatch_t *rkmb) {
         rd_kafka_t *rk          = rktp->rktp_rkt->rkt_rk;
 
         /* Keep track of number of requests in-flight per partition,
-         * and the number of partitions with in-flight requests when
+         * which the idempotent producer limits to the broker's sequence
+         * de-duplication window. */
+        rd_atomic32_add(&rktp->rktp_reqs_inflight, 1);
+
+        /* Keep track of number of messages in-flight per partition,
+         * and the number of partitions with in-flight messages when
          * idempotent producer - this is used to drain partitions
          * before resetting the PID. */
         if (rd_atomic32_add(&rktp->rktp_msgs_inflight,

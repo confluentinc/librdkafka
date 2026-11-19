@@ -381,6 +381,74 @@ static void do_test_ListConsumerGroupOffsets_errors(rd_kafka_type_t type,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief DescribeCluster and DescribeTopics must fail with the top-level
+ *        ErrorCode of the Metadata response they get.
+ */
+static void do_test_Describe_Metadata_error(rd_bool_t describe_topics) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        const char *topic = "admin-metadata-error";
+        rd_kafka_queue_t *q;
+        size_t i;
+        const rd_kafka_resp_err_t errors[] = {
+            RD_KAFKA_RESP_ERR_NO_ERROR,
+            RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED};
+
+        SUB_TEST_QUICK("%s",
+                       describe_topics ? "DescribeTopics" : "DescribeCluster");
+
+        test_conf_init(&conf, NULL, 30);
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_set_controller_id(mcluster, 1);
+        TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic, 1, 1));
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        /* Leave the injected error to the admin request's Metadata */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "-1");
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        q  = rd_kafka_queue_new(rk);
+
+        for (i = 0; i < RD_ARRAYSIZE(errors); i++) {
+                rd_kafka_event_t *event;
+
+                TEST_SAY("%s: injecting %s\n",
+                         describe_topics ? "DescribeTopics" : "DescribeCluster",
+                         rd_kafka_err2name(errors[i]));
+                if (errors[i])
+                        rd_kafka_mock_push_request_errors(
+                            mcluster, RD_KAFKAP_Metadata, 1, errors[i]);
+
+                if (describe_topics) {
+                        rd_kafka_TopicCollection_t *topics =
+                            rd_kafka_TopicCollection_of_topic_names(&topic, 1);
+                        rd_kafka_DescribeTopics(rk, topics, NULL, q);
+                        rd_kafka_TopicCollection_destroy(topics);
+                        event = test_wait_admin_result(
+                            q, RD_KAFKA_EVENT_DESCRIBETOPICS_RESULT,
+                            tmout_multip(10000));
+                } else {
+                        rd_kafka_DescribeCluster(rk, NULL, q);
+                        event = test_wait_admin_result(
+                            q, RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT,
+                            tmout_multip(10000));
+                }
+
+                TEST_ASSERT(rd_kafka_event_error(event) == errors[i],
+                            "Expected %s, got %s: %s",
+                            rd_kafka_err2name(errors[i]),
+                            rd_kafka_err2name(rd_kafka_event_error(event)),
+                            rd_kafka_event_error_string(event));
+                rd_kafka_event_destroy(event);
+        }
+
+        rd_kafka_queue_destroy(q);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
+
 int main_0138_admin_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -393,6 +461,9 @@ int main_0138_admin_mock(int argc, char **argv) {
         do_test_ListConsumerGroupOffsets_errors(RD_KAFKA_PRODUCER, rd_false);
         do_test_ListConsumerGroupOffsets_errors(RD_KAFKA_CONSUMER, rd_false);
         do_test_ListConsumerGroupOffsets_errors(RD_KAFKA_CONSUMER, rd_true);
+
+        do_test_Describe_Metadata_error(rd_false);
+        do_test_Describe_Metadata_error(rd_true);
 
         return 0;
 }

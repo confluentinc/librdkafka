@@ -13,7 +13,7 @@
   `0x00` byte, shifting every following field. Brokers that ignore bytes left
   over after parsing a request accepted it, while stricter receivers could
   reject the request or close the connection. The placeholder is now shrunk
-  the same way as for other flexible-version arrays.
+  the same way as for other flexible-version arrays (#5684).
 
 ### Admin fixes
 

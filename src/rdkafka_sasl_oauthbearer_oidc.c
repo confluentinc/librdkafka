@@ -185,7 +185,14 @@ static const char *rd_kafka_jwt_b64_decode_payload(const char *src,
         if (EVP_DecodeBlock((uint8_t *)(*bufplainp), (uint8_t *)payload,
                             (int)payload_len) == -1) {
                 errstr = "Failed to decode base64 payload";
+                goto done;
         }
+
+        /* EVP_DecodeBlock() does not NUL-terminate its output. The decoded
+         * payload is handed to cJSON_Parse() which runs strlen() on it, so a
+         * payload whose base64 length is a multiple of 4 (no '=' padding)
+         * leaves the trailing byte uninitialized and reads past the buffer. */
+        (*bufplainp)[nbytesdecoded] = '\0';
 
 done:
         RD_IF_FREE(payload, rd_free);
@@ -1396,6 +1403,16 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
         "Y2xpZW50X2lkXzEyMyJ9"                                                 \
         "."                                                                    \
         "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":"a"}
+ * The base64url payload segment is 60 chars (a multiple of 4, so no '='
+ * padding), which exercises the case where EVP_DecodeBlock() fills the whole
+ * decode buffer and the result must be NUL-terminated before cJSON_Parse. */
+#define UT_JWT_NO_PADDING                                                      \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoiYSJ9"         \
+        "."                                                                    \
+        "fakesignature"
 
 /**
  * @brief Verifies the extraction logic of the subject from the configured JWT
@@ -1425,6 +1442,7 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
              NULL},
             {"Nonexistent claim name fails", UT_JWT_SUB_ONLY, "nonexistent",
              rd_false, NULL},
+            {"Unpadded base64 payload", UT_JWT_NO_PADDING, "sub", rd_true, "a"},
         };
 
         unsigned int i;

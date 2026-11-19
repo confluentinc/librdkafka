@@ -327,14 +327,9 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
 void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
                                 const char *group_id,
                                 const char *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
-                                void *opaque);
-void rd_kafka_handle_LeaveGroup(rd_kafka_t *rk,
-                                rd_kafka_broker_t *rkb,
-                                rd_kafka_resp_err_t err,
-                                rd_kafka_buf_t *rkbuf,
-                                rd_kafka_buf_t *request,
                                 void *opaque);
 
 void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,

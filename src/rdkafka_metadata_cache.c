@@ -1148,8 +1148,10 @@ int rd_kafka_metadata_cache_topic_partition_get(
                 return 0;
 
         *mpartp = mpart;
+        /* The internal partitions are sorted the same way: use the
+         * position of the partition, not its id. */
         if (mdpip)
-                *mdpip = &mdti->partitions[mpart->id];
+                *mdpip = &mdti->partitions[mpart - mtopic->partitions];
 
         return 1;
 }

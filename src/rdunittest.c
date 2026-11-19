@@ -424,6 +424,7 @@ extern int unittest_scram(void);
 extern int unittest_assignors(void);
 extern int unittest_map(void);
 extern int unittest_fetcher_share_filter_forward(void);
+extern int unittest_metadata_update(void);
 extern int unittest_share_acknowledge(void);
 extern int rd_kafka_unittest_msgset_errors(void);
 #if WITH_CURL
@@ -492,6 +493,7 @@ int rd_unittest(void) {
             {"assignment", unittest_assignment},
             {"fetcher_share_filter_forward",
              unittest_fetcher_share_filter_forward},
+            {"metadata_update", unittest_metadata_update},
             {"share_acknowledge", unittest_share_acknowledge},
             {"msgset_errors", rd_kafka_unittest_msgset_errors},
             {"feature", unittest_feature},

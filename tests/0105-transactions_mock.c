@@ -1548,6 +1548,101 @@ static void do_test_txn_abort_endtxn_controls(void) {
 
 
 /**
+ * @brief Abort a transaction where a single AddPartitionsToTxn response
+ *        added one partition and rejected another with a broker error.
+ *
+ *        The coordinator started the transaction, so abort_transaction()
+ *        must send EndTxn even though the response contained an error.
+ */
+static void do_test_txn_abort_addparts_mixed_result(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *txnid          = "myTxnId";
+        const char *topic          = "mytopic";
+        const char *rejected_topic = "mytopic_rejected";
+        size_t addparts_cnt, endtxn_cnt;
+        int i;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, txnid, 3, NULL);
+
+        /* The message to the rejected topic is purged on abort() */
+        test_curr->ignore_dr_err = rd_true;
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        /* Commit a transaction to both topics first so that their
+         * metadata is known. */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC(rejected_topic), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 5000));
+
+        /* Fail the first AddPartitionsToTxn request with a request-level
+         * retriable error so that both partitions are sent together in
+         * the retried request. */
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_AddPartitionsToTxn, 1,
+            RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC(rejected_topic), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+
+        /* Wait for the first AddPartitionsToTxn request, then make the
+         * coordinator reject the second topic in the retried request. */
+        for (i = 0; i < 500 && count_mock_requests(
+                                   mcluster, RD_KAFKAP_AddPartitionsToTxn) == 0;
+             i++)
+                rd_usleep(10 * 1000, 0);
+        rd_kafka_mock_topic_set_error(
+            mcluster, rejected_topic,
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+
+        /* Wait for the retried request and let its response be handled */
+        for (i = 0; i < 500 && count_mock_requests(
+                                   mcluster, RD_KAFKAP_AddPartitionsToTxn) < 2;
+             i++)
+                rd_usleep(10 * 1000, 0);
+        rd_sleep(1);
+
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, 5000));
+
+        addparts_cnt =
+            count_mock_requests(mcluster, RD_KAFKAP_AddPartitionsToTxn);
+        endtxn_cnt = count_mock_requests(mcluster, RD_KAFKAP_EndTxn);
+
+        TEST_SAY("%" PRIusz " AddPartitionsToTxn and %" PRIusz
+                 " EndTxn requests sent\n",
+                 addparts_cnt, endtxn_cnt);
+
+        TEST_ASSERT(addparts_cnt == 2,
+                    "Expected two AddPartitionsToTxn requests, got %" PRIusz,
+                    addparts_cnt);
+        TEST_ASSERT(endtxn_cnt == 1,
+                    "Expected one EndTxn request since the coordinator "
+                    "added a partition, got %" PRIusz,
+                    endtxn_cnt);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Test abortable errors using mock broker error injections
  *        and code coverage checks.
  */
@@ -4415,6 +4510,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
             RD_KAFKA_RESP_ERR_NOT_COORDINATOR);
         do_test_txn_abort_after_addparts_broker_errors(
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+
+        do_test_txn_abort_addparts_mixed_result();
 
         do_test_txn_abort_after_addparts_timeout();
 

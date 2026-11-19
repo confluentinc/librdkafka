@@ -5718,12 +5718,16 @@ static void rd_kafka_cgrp_revoke_all_rejoin(rd_kafka_cgrp_t *rkcg,
         }
 
         if (terminating) {
-                /* If terminating, then don't rejoin group. */
+                /* If terminating, then don't rejoin group.
+                 * There is nothing to revoke, so no incremental unassign
+                 * will follow to leave the group from: this is the last
+                 * chance to send the LeaveGroupRequest. */
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER | RD_KAFKA_DBG_CGRP,
                              "REBALANCE",
                              "Group \"%.*s\": consumer is "
                              "terminating, skipping rejoin",
                              RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+                rd_kafka_cgrp_leave_maybe(rkcg);
                 return;
         }
 

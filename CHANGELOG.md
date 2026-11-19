@@ -12,6 +12,12 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+* Fix `DescribeUserScramCredentials` and `AlterUserScramCredentials` results
+  whose user name or error message could carry trailing bytes read past the
+  end of the field in the response, a crash on a null user name or
+  credentials list, and an invalid free when `DescribeUserScramCredentials`
+  fails with a request-level error (@anabobillo3).
+
 ### General fixes
 
 * Issues: #5630.
@@ -48,6 +54,10 @@
   backoff could become negative or restart from 1ms, so heartbeats were sent
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
+
+* Fix the member id of a `ConsumerGroupHeartbeat` or `ShareGroupHeartbeat`
+  response being read past the end of the field in the response buffer
+  (@anabobillo3).
 
 
 # librdkafka v2.16.0

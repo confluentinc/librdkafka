@@ -1,0 +1,5 @@
+{
+    "overlay-ports": [
+        "./win32/vcpkg-overlay-ports"
+    ]
+}

@@ -381,6 +381,113 @@ static void do_test_ListConsumerGroupOffsets_errors(rd_kafka_type_t type,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief An Admin request to the group coordinator that the broker
+ *        doesn't support fails before it is sent: check that it fails with
+ *        RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE and releases the reference
+ *        to the reply queue it was given once. DeleteGroups and
+ *        DeleteConsumerGroupOffsets released it twice: rd_kafka_destroy()
+ *        then asserted in rd_kafka_q_destroy0(). For DescribeConsumerGroups,
+ *        a leaked reference shows under valgrind or ASan.
+ */
+static void do_test_coord_request_unsupported(rd_kafka_admin_op_t op) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        const char *topic    = "admin-coord-unsupported";
+        const char *group_id = "admin-coord-unsupported-group";
+        rd_kafka_queue_t *q;
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+
+        SUB_TEST_QUICK("%s",
+                       op == RD_KAFKA_ADMIN_OP_DELETEGROUPS ? "DeleteGroups"
+                       : op == RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS
+                           ? "DeleteConsumerGroupOffsets"
+                           : "DescribeConsumerGroups");
+
+        test_conf_init(&conf, NULL, 30);
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic, 1, 1));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_DeleteGroups, -1, -1));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_OffsetDelete, -1, -1));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_ConsumerGroupDescribe, -1, -1));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_DescribeGroups, -1, -1));
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        q  = rd_kafka_queue_new(rk);
+
+        if (op == RD_KAFKA_ADMIN_OP_DELETEGROUPS) {
+                rd_kafka_DeleteGroup_t *del_group;
+                const rd_kafka_group_result_t **groups;
+                size_t group_cnt;
+
+                del_group = rd_kafka_DeleteGroup_new(group_id);
+                rd_kafka_DeleteGroups(rk, &del_group, 1, NULL, q);
+                rd_kafka_DeleteGroup_destroy(del_group);
+
+                rkev = test_wait_admin_result(
+                    q, RD_KAFKA_EVENT_DELETEGROUPS_RESULT, tmout_multip(10000));
+                groups = rd_kafka_DeleteGroups_result_groups(
+                    rd_kafka_event_DeleteGroups_result(rkev), &group_cnt);
+                TEST_ASSERT(group_cnt == 1, "Expected one group, got %" PRIusz,
+                            group_cnt);
+                err =
+                    rd_kafka_error_code(rd_kafka_group_result_error(groups[0]));
+
+        } else if (op == RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS) {
+                rd_kafka_DeleteConsumerGroupOffsets_t *del_offsets;
+                rd_kafka_topic_partition_list_t *partitions;
+
+                partitions = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(partitions, topic, 0);
+                del_offsets = rd_kafka_DeleteConsumerGroupOffsets_new(
+                    group_id, partitions);
+                rd_kafka_topic_partition_list_destroy(partitions);
+                rd_kafka_DeleteConsumerGroupOffsets(rk, &del_offsets, 1, NULL,
+                                                    q);
+                rd_kafka_DeleteConsumerGroupOffsets_destroy(del_offsets);
+
+                rkev = test_wait_admin_result(
+                    q, RD_KAFKA_EVENT_DELETECONSUMERGROUPOFFSETS_RESULT,
+                    tmout_multip(10000));
+                err = rd_kafka_event_error(rkev);
+
+        } else {
+                const rd_kafka_ConsumerGroupDescription_t **groups;
+                size_t group_cnt;
+
+                rd_kafka_DescribeConsumerGroups(rk, &group_id, 1, NULL, q);
+
+                rkev = test_wait_admin_result(
+                    q, RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT,
+                    tmout_multip(10000));
+                groups = rd_kafka_DescribeConsumerGroups_result_groups(
+                    rd_kafka_event_DescribeConsumerGroups_result(rkev),
+                    &group_cnt);
+                TEST_ASSERT(group_cnt == 1, "Expected one group, got %" PRIusz,
+                            group_cnt);
+                err = rd_kafka_error_code(
+                    rd_kafka_ConsumerGroupDescription_error(groups[0]));
+        }
+
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "Expected %s, got %s",
+                    rd_kafka_err2name(RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE),
+                    rd_kafka_err2name(err));
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_queue_destroy(q);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
+
 int main_0138_admin_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -393,6 +500,12 @@ int main_0138_admin_mock(int argc, char **argv) {
         do_test_ListConsumerGroupOffsets_errors(RD_KAFKA_PRODUCER, rd_false);
         do_test_ListConsumerGroupOffsets_errors(RD_KAFKA_CONSUMER, rd_false);
         do_test_ListConsumerGroupOffsets_errors(RD_KAFKA_CONSUMER, rd_true);
+
+        do_test_coord_request_unsupported(RD_KAFKA_ADMIN_OP_DELETEGROUPS);
+        do_test_coord_request_unsupported(
+            RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS);
+        do_test_coord_request_unsupported(
+            RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
 
         return 0;
 }

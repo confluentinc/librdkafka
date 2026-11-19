@@ -2951,11 +2951,12 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
 
         } else if (total_topic_cnt == 0) {
                 /* v0: keep 0, request all topics */
-                if (ApiVersion >= 1 && ApiVersion < 9) {
-                        /* v1-8: update to -1, all topics */
-                        rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, -1);
+                if (ApiVersion >= 1) {
+                        /* v1-8: update to -1, all topics
+                         * v9+: varint encoded null (0), all topics */
+                        rd_kafka_buf_finalize_arraycnt_null(rkbuf,
+                                                            of_TopicArrayCnt);
                 }
-                /* v9+: keep 0, varint encoded null, all topics */
 
                 rkbuf->rkbuf_u.Metadata.all_topics = 1;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",
@@ -7492,10 +7493,68 @@ static int unittest_handle_Produce_record_errors(void) {
 }
 
 /**
+ * @brief Verify that a null array count occupies exactly the bytes the
+ *        protocol defines: a single 0x00 byte (compact array) for flexver
+ *        requests and an i32 -1 otherwise, with the fields written after it
+ *        following immediately.
+ *
+ * @returns 1 on failure, 0 on success.
+ */
+static int unittest_finalize_arraycnt_null(void) {
+        static const struct {
+                const char *what;
+                int flexver;
+                const char expect[8];
+                size_t expect_size;
+        } tests[] = {
+            {"flexver", 1, {0x00, 0x01, 0x00, 0x00}, 4},
+            {"non-flexver", 0, {0xff, 0xff, 0xff, 0xff, 0x01, 0x00}, 6},
+        };
+        size_t i;
+
+        for (i = 0; i < RD_ARRAYSIZE(tests); i++) {
+                rd_kafka_buf_t *rkbuf = rd_kafka_buf_new(1, 16);
+                rd_slice_t slice;
+                char actual[16];
+                size_t of, len;
+
+                RD_UT_SAY("Verifying null array count encoding: %s",
+                          tests[i].what);
+
+                if (tests[i].flexver)
+                        rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+
+                of = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_buf_finalize_arraycnt_null(rkbuf, of);
+                rd_kafka_buf_write_bool(rkbuf, rd_true);
+                rd_kafka_buf_write_bool(rkbuf, rd_false);
+                if (tests[i].flexver)
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+
+                len = rd_buf_len(&rkbuf->rkbuf_buf);
+                RD_UT_ASSERT(len == tests[i].expect_size,
+                             "%s: expected %" PRIusz " bytes, got %" PRIusz,
+                             tests[i].what, tests[i].expect_size, len);
+
+                rd_slice_init_full(&slice, &rkbuf->rkbuf_buf);
+                rd_slice_read(&slice, actual, len);
+                RD_UT_ASSERT(!memcmp(actual, tests[i].expect, len),
+                             "%s: unexpected bytes on the wire", tests[i].what);
+
+                rd_kafka_buf_destroy(rkbuf);
+        }
+
+        RD_UT_PASS();
+        return 0;
+}
+
+/**
  * @brief Request/response unit tests
  */
 int unittest_request(void) {
         int fails = 0;
+
+        fails += unittest_finalize_arraycnt_null();
 
         fails += unittest_idempotent_producer();
         fails += unittest_handle_Produce_record_errors();

@@ -49,6 +49,12 @@
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
 
+* Fix messages of a FetchResponse received after its partition was unassigned
+  being left on the partition's fetch queue, where they stayed allocated, up
+  to `fetch.message.max.bytes` for each such partition, until the partition
+  was assigned to the same consumer again or the consumer was destroyed
+  (#5676, @ranflarion).
+
 
 # librdkafka v2.16.0
 

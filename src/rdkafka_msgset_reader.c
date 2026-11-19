@@ -1571,6 +1571,7 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
         rd_kafka_toppar_t *rktp = msetr->msetr_rktp;
         rd_kafka_resp_err_t err;
         int64_t last_offset = -1;
+        int enq_err;
 
         /* Parse MessageSets and messages */
         err = rd_kafka_msgset_reader(msetr);
@@ -1696,7 +1697,31 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
 
         /* Concat all messages&errors onto the parent's queue
          * (the partition's fetch queue) */
-        if (rd_kafka_q_concat(msetr->msetr_par_rkq, &msetr->msetr_rkq) != -1) {
+        if (msetr->msetr_par_rkq != rktp->rktp_fetchq) {
+                enq_err =
+                    rd_kafka_q_concat(msetr->msetr_par_rkq, &msetr->msetr_rkq);
+        } else {
+                /* rd_kafka_toppar_fetch_stop() unforwards the fetch queue,
+                 * under its lock, after the version barrier was bumped.
+                 * Checking the barrier under the same lock keeps outdated
+                 * messages off a queue that no reader serves. */
+                rd_kafka_q_lock(rktp->rktp_fetchq);
+                if (msetr->msetr_tver->version <
+                    rd_atomic32_get(&rktp->rktp_version)) {
+                        rd_atomic64_add(&rktp->rktp_c.rx_ver_drops, 1);
+                        enq_err = -1;
+                } else if (rktp->rktp_fetchq->rkq_fwdq) {
+                        enq_err = rd_kafka_q_concat(rktp->rktp_fetchq->rkq_fwdq,
+                                                    &msetr->msetr_rkq);
+                } else {
+                        enq_err = rd_kafka_q_concat0(rktp->rktp_fetchq,
+                                                     &msetr->msetr_rkq,
+                                                     0 /*no-lock*/);
+                }
+                rd_kafka_q_unlock(rktp->rktp_fetchq);
+        }
+
+        if (enq_err != -1) {
                 /* Update partition's fetch offset based on
                  * last message's offest. */
                 if (likely(last_offset != -1) &&

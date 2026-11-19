@@ -699,6 +699,13 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
 
 
 /**
+ * @brief Maximum number of error ops emitted by
+ *        rd_kafka_share_msgset_err_ops() for a single MessageSet error.
+ *        Bounds the memory fan-out for corrupt or malicious offset ranges.
+ */
+#define RD_KAFKA_SHARE_MSGSET_ERR_OPS_MAX 10000
+
+/**
  * @brief Enqueue multiple RD_KAFKA_OP_CONSUMER_ERR ops on \p rkq for
  *        a range of offsets, used for share consumer MessageSet-level errors.
  *
@@ -731,11 +738,24 @@ void rd_kafka_share_msgset_err_ops(
         va_list ap;
         char buf[2048];
         int64_t offset;
+        int64_t range = end_offset - start_offset + 1;
 
         /* Format error message once for all offsets */
         va_start(ap, fmt);
         rd_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
+
+        /* A broker-controlled LastOffsetDelta can inflate the offset range
+         * far beyond the number of records in the batch, turning a small
+         * response into an unbounded memory fan-out (one op + one ~2KB
+         * errstr per offset), or make it negative so no error is emitted
+         * at all. If the range is implausible emit a single summary op
+         * for the first offset instead; uncovered acquired offsets remain
+         * GAP in the inflight acks. The error message already carries the
+         * full offset range. */
+        if (unlikely(range < 1 || range > RD_KAFKA_SHARE_MSGSET_ERR_OPS_MAX)) {
+                end_offset = start_offset;
+        }
 
         /* Create one error op per offset in the range */
         for (offset = start_offset; offset <= end_offset; offset++) {

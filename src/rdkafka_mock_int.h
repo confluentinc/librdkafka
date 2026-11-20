@@ -330,6 +330,20 @@ typedef struct rd_kafka_mock_txn_partition_s {
  *
  * One per TransactionalId, stored in mcluster->transactions.
  */
+/**
+ * @brief An offset sent with TxnOffsetCommit, committed to the group
+ *        when the transaction is committed.
+ */
+typedef struct rd_kafka_mock_txn_offset_s {
+        TAILQ_ENTRY(rd_kafka_mock_txn_offset_s) link;
+        rd_kafka_pid_t pid;        /**< Producer that sent the offset */
+        char *group;               /**< Consumer group id */
+        char *topic;               /**< Topic name */
+        int32_t partition;         /**< Partition id */
+        int64_t offset;            /**< Offset to commit */
+        rd_kafkap_str_t *metadata; /**< Offset metadata */
+} rd_kafka_mock_txn_offset_t;
+
 typedef struct rd_kafka_mock_txn_s {
         TAILQ_ENTRY(rd_kafka_mock_txn_s) link;
         char *transactional_id;
@@ -339,6 +353,9 @@ typedef struct rd_kafka_mock_txn_s {
         /** Partitions registered via AddPartitionsToTxn */
         TAILQ_HEAD(, rd_kafka_mock_txn_partition_s) partitions;
         int partition_cnt;
+
+        /** Offsets sent via TxnOffsetCommit, pending until EndTxn */
+        TAILQ_HEAD(, rd_kafka_mock_txn_offset_s) offsets;
 } rd_kafka_mock_txn_t;
 
 /**
@@ -814,6 +831,18 @@ void rd_kafka_mock_txn_partition_add(rd_kafka_mock_txn_t *mtxn,
                                      const char *topic,
                                      int32_t partition);
 void rd_kafka_mock_txn_partitions_clear(rd_kafka_mock_txn_t *mtxn);
+
+void rd_kafka_mock_txn_offset_add(rd_kafka_mock_txn_t *mtxn,
+                                  rd_kafka_pid_t pid,
+                                  const rd_kafkap_str_t *group,
+                                  const rd_kafkap_str_t *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  const rd_kafkap_str_t *metadata);
+
+void rd_kafka_mock_txn_offsets_commit(rd_kafka_mock_cluster_t *mcluster,
+                                      rd_kafka_mock_txn_t *mtxn,
+                                      rd_kafka_pid_t pid);
 void rd_kafka_mock_partition_update_lso(rd_kafka_mock_partition_t *mpart,
                                         rd_kafka_mock_cluster_t *mcluster);
 void rd_kafka_mock_partition_write_control_batch(

@@ -239,6 +239,7 @@ rd_kafka_mock_txn_get(rd_kafka_mock_cluster_t *mcluster,
         mtxn->state            = RD_KAFKA_MOCK_TXN_NONE;
         TAILQ_INIT(&mtxn->partitions);
         mtxn->partition_cnt = 0;
+        TAILQ_INIT(&mtxn->offsets);
         TAILQ_INSERT_TAIL(&mcluster->transactions, mtxn, link);
 
         return mtxn;
@@ -280,17 +281,101 @@ void rd_kafka_mock_txn_partition_add(rd_kafka_mock_txn_t *mtxn,
         mtxn->partition_cnt++;
 }
 
+static void
+rd_kafka_mock_txn_offset_destroy(rd_kafka_mock_txn_t *mtxn,
+                                 rd_kafka_mock_txn_offset_t *mtxno) {
+        TAILQ_REMOVE(&mtxn->offsets, mtxno, link);
+        rd_free(mtxno->group);
+        rd_free(mtxno->topic);
+        if (mtxno->metadata)
+                rd_kafkap_str_destroy(mtxno->metadata);
+        rd_free(mtxno);
+}
+
 /**
- * @brief Clear all partitions from a transaction (after commit/abort).
+ * @brief Clear all partitions and pending offsets from a transaction
+ *        (after commit/abort).
  */
 void rd_kafka_mock_txn_partitions_clear(rd_kafka_mock_txn_t *mtxn) {
         rd_kafka_mock_txn_partition_t *mtxnp, *tmp;
+        rd_kafka_mock_txn_offset_t *mtxno, *tmpo;
         TAILQ_FOREACH_SAFE(mtxnp, &mtxn->partitions, link, tmp) {
                 TAILQ_REMOVE(&mtxn->partitions, mtxnp, link);
                 rd_free(mtxnp->topic_name);
                 rd_free(mtxnp);
         }
         mtxn->partition_cnt = 0;
+        TAILQ_FOREACH_SAFE(mtxno, &mtxn->offsets, link, tmpo)
+        rd_kafka_mock_txn_offset_destroy(mtxn, mtxno);
+}
+
+/**
+ * @brief Add an offset sent with TxnOffsetCommit to the transaction,
+ *        replacing an earlier one for the same group and partition.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_txn_offset_add(rd_kafka_mock_txn_t *mtxn,
+                                  rd_kafka_pid_t pid,
+                                  const rd_kafkap_str_t *group,
+                                  const rd_kafkap_str_t *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  const rd_kafkap_str_t *metadata) {
+        rd_kafka_mock_txn_offset_t *mtxno;
+
+        TAILQ_FOREACH(mtxno, &mtxn->offsets, link) {
+                if (mtxno->partition == partition &&
+                    !rd_kafkap_str_cmp_str(group, mtxno->group) &&
+                    !rd_kafkap_str_cmp_str(topic, mtxno->topic))
+                        break;
+        }
+
+        if (!mtxno) {
+                mtxno            = rd_calloc(1, sizeof(*mtxno));
+                mtxno->group     = RD_KAFKAP_STR_DUP(group);
+                mtxno->topic     = RD_KAFKAP_STR_DUP(topic);
+                mtxno->partition = partition;
+                TAILQ_INSERT_TAIL(&mtxn->offsets, mtxno, link);
+        } else if (mtxno->metadata) {
+                rd_kafkap_str_destroy(mtxno->metadata);
+        }
+
+        mtxno->pid      = pid;
+        mtxno->offset   = offset;
+        mtxno->metadata = rd_kafkap_str_copy(metadata);
+}
+
+/**
+ * @brief Commit the transaction's pending offsets that were sent by \p pid
+ *        to their groups.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_txn_offsets_commit(rd_kafka_mock_cluster_t *mcluster,
+                                      rd_kafka_mock_txn_t *mtxn,
+                                      rd_kafka_pid_t pid) {
+        rd_kafka_mock_txn_offset_t *mtxno;
+
+        TAILQ_FOREACH(mtxno, &mtxn->offsets, link) {
+                rd_kafka_mock_topic_t *mtopic;
+                rd_kafka_mock_partition_t *mpart;
+                rd_kafkap_str_t group = {.str = mtxno->group,
+                                         .len = (int)strlen(mtxno->group)};
+
+                if (!rd_kafka_pid_eq(mtxno->pid, pid))
+                        continue;
+
+                mtopic = rd_kafka_mock_topic_find(mcluster, mtxno->topic);
+                if (!mtopic)
+                        continue;
+                mpart = rd_kafka_mock_partition_find(mtopic, mtxno->partition);
+                if (!mpart)
+                        continue;
+
+                rd_kafka_mock_commit_offset(mpart, &group, mtxno->offset,
+                                            mtxno->metadata);
+        }
 }
 
 /**

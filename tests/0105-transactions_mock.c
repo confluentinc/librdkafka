@@ -1767,6 +1767,127 @@ static void do_test_txns_send_offsets_non_eligible(void) {
 
 
 /**
+ * @brief Begin a transaction and send a single offset for \p topic [0].
+ */
+static rd_kafka_error_t *
+txn_offsets_send(rd_kafka_t *rk,
+                 const char *topic,
+                 int64_t offset,
+                 const rd_kafka_consumer_group_metadata_t *cgmetadata) {
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_error_t *error;
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, topic, 0)->offset = offset;
+        error =
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        return error;
+}
+
+/**
+ * @brief Verify the committed offset of \p topic [0] for \p c's group.
+ */
+static void
+txn_offsets_verify_committed(rd_kafka_t *c, const char *topic, int64_t exp) {
+        rd_kafka_topic_partition_list_t *offsets;
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, topic, 0);
+        TEST_CALL_ERR__(rd_kafka_committed(c, offsets, tmout_multip(5000)));
+        TEST_ASSERT(offsets->elems[0].offset == exp,
+                    "Expected committed offset %" PRId64
+                    " for %s [0], "
+                    "not %" PRId64,
+                    exp, topic, offsets->elems[0].offset);
+        rd_kafka_topic_partition_list_destroy(offsets);
+}
+
+/**
+ * @brief Offsets sent with send_offsets_to_transaction() must become the
+ *        group's committed offsets when the transaction is committed, must
+ *        be discarded when it is aborted, and must be rejected when the
+ *        consumer group metadata belongs to a member that has left the group.
+ *        https://github.com/confluentinc/librdkafka/issues/5652
+ */
+static void do_test_txn_offsets_committed(void) {
+        rd_kafka_t *rk, *c;
+        rd_kafka_conf_t *c_conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        rd_kafka_error_t *error;
+        const char *topic = "txnoffsetstopic";
+        const char *group = "txnoffsetsgroup";
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 3);
+
+        test_conf_init(&c_conf, NULL, 0);
+        test_conf_set(c_conf, "bootstrap.servers",
+                      rd_kafka_mock_cluster_bootstraps(mcluster));
+        test_conf_set(c_conf, "enable.auto.commit", "false");
+        c = test_create_consumer(group, NULL, c_conf, NULL);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+
+        TEST_SAY("Committed transaction: offset is stored\n");
+        cgmetadata = rd_kafka_consumer_group_metadata_new(group);
+        TEST_CALL_ERROR__(txn_offsets_send(rk, topic, 10, cgmetadata));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+        txn_offsets_verify_committed(c, topic, 10);
+
+        TEST_SAY("Aborted transaction: offset is discarded\n");
+        TEST_CALL_ERROR__(txn_offsets_send(rk, topic, 20, cgmetadata));
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+        txn_offsets_verify_committed(c, topic, 10);
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+
+        TEST_SAY("Current group member: offset is stored\n");
+        test_consumer_subscribe(c, topic);
+        test_consumer_wait_assignment(c, rd_true);
+        cgmetadata = rd_kafka_consumer_group_metadata(c);
+        TEST_CALL_ERROR__(txn_offsets_send(rk, topic, 30, cgmetadata));
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+        txn_offsets_verify_committed(c, topic, 30);
+
+        TEST_SAY("Member that left the group: offset is rejected\n");
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+
+        error = txn_offsets_send(rk, topic, 40, cgmetadata);
+        TEST_ASSERT(error != NULL,
+                    "Expected send_offsets_to_transaction() to fail");
+        TEST_SAY("send_offsets_to_transaction() failed: %s\n",
+                 rd_kafka_error_string(error));
+        TEST_ASSERT(
+            rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
+            "Expected UNKNOWN_MEMBER_ID, not %s", rd_kafka_error_name(error));
+        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error),
+                    "Expected the error to require an abort");
+        rd_kafka_error_destroy(error);
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+
+        test_conf_init(&c_conf, NULL, 0);
+        test_conf_set(c_conf, "bootstrap.servers",
+                      rd_kafka_mock_cluster_bootstraps(mcluster));
+        c = test_create_consumer(group, NULL, c_conf, NULL);
+        txn_offsets_verify_committed(c, topic, 30);
+        rd_kafka_destroy(c);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Verify that request timeouts don't cause crash (#2913).
  */
 static void do_test_txns_no_timeout_crash(void) {
@@ -4096,6 +4217,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txns_send_offsets_concurrent_is_retried();
 
         do_test_txns_send_offsets_non_eligible();
+
+        do_test_txn_offsets_committed();
 
         do_test_txn_coord_req_destroy();
 

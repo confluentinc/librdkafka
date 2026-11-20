@@ -2323,6 +2323,18 @@ rd_kafka_mock_handle_AddOffsetsToTxn(rd_kafka_mock_connection_t *mconn,
         if (!err)
                 err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
+        /* The group's offsets partition is now part of the transaction,
+         * so it is ongoing even if no data is produced in it. */
+        if (!err) {
+                rd_kafka_mock_txn_t *mtxn;
+
+                mtx_lock(&mcluster->lock);
+                mtxn        = rd_kafka_mock_txn_get(mcluster, &TransactionalId);
+                mtxn->pid   = pid;
+                mtxn->state = RD_KAFKA_MOCK_TXN_ONGOING;
+                mtx_unlock(&mcluster->lock);
+        }
+
         /* Response: ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
 
@@ -2333,6 +2345,76 @@ rd_kafka_mock_handle_AddOffsetsToTxn(rd_kafka_mock_connection_t *mconn,
 err_parse:
         rd_kafka_buf_destroy(resp);
         return -1;
+}
+
+
+/**
+ * @brief Validate the group member fields of a TxnOffsetCommit request
+ *        (v3+) the way the broker does.
+ *
+ * A request without a generation, member id or group instance id is not
+ * validated, it comes from a producer that only knows the group id.
+ * The broker returns ILLEGAL_GENERATION instead of STALE_MEMBER_EPOCH
+ * before TxnOffsetCommit v6.
+ */
+static rd_kafka_resp_err_t rd_kafka_mock_txn_offset_commit_check_member(
+    rd_kafka_mock_cluster_t *mcluster,
+    const rd_kafkap_str_t *GroupId,
+    int32_t GenerationId,
+    const rd_kafkap_str_t *MemberId,
+    const rd_kafkap_str_t *GroupInstanceId) {
+        rd_kafka_mock_cgrp_classic_t *mcgrp_classic;
+        rd_kafka_mock_cgrp_consumer_t *mcgrp_consumer;
+        rd_bool_t has_member_fields = GenerationId >= 0 ||
+                                      RD_KAFKAP_STR_LEN(MemberId) > 0 ||
+                                      !RD_KAFKAP_STR_IS_NULL(GroupInstanceId);
+
+        mcgrp_classic = rd_kafka_mock_cgrp_classic_find(mcluster, GroupId);
+        if (mcgrp_classic) {
+                if (GenerationId < 0 &&
+                    mcgrp_classic->state == RD_KAFKA_MOCK_CGRP_STATE_EMPTY)
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                if (!has_member_fields)
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                if (!rd_kafka_mock_cgrp_classic_member_find(mcgrp_classic,
+                                                            MemberId))
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+
+                if (GenerationId != mcgrp_classic->generation_id)
+                        return RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION;
+
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        mcgrp_consumer = rd_kafka_mock_cgrp_consumer_find(mcluster, GroupId);
+        if (mcgrp_consumer) {
+                rd_kafka_mock_cgrp_consumer_member_t *member;
+
+                if (GenerationId < 0 && mcgrp_consumer->member_cnt == 0)
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                if (!has_member_fields)
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                member = rd_kafka_mock_cgrp_consumer_member_find(mcgrp_consumer,
+                                                                 MemberId);
+                if (!member)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+
+                /* An older epoch can still be valid for partitions that
+                 * were assigned before it, which the mock doesn't track,
+                 * so only a newer epoch is rejected. */
+                if (GenerationId > member->current_member_epoch)
+                        return RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION;
+
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        /* Unknown group: only accepted without a generation. */
+        return GenerationId < 0 ? RD_KAFKA_RESP_ERR_NO_ERROR
+                                : RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION;
 }
 
 
@@ -2349,6 +2431,10 @@ rd_kafka_mock_handle_TxnOffsetCommit(rd_kafka_mock_connection_t *mconn,
         rd_kafkap_str_t TransactionalId, GroupId;
         rd_kafka_pid_t pid;
         int32_t TopicsCnt;
+        int32_t GenerationId             = -1;
+        rd_kafkap_str_t kMemberId        = RD_KAFKAP_STR_INITIALIZER_EMPTY;
+        rd_kafkap_str_t kGroupInstanceId = RD_KAFKAP_STR_INITIALIZER;
+        rd_kafka_mock_txn_t *mtxn        = NULL;
 
         /* Response: ThrottleTimeMs */
         rd_kafka_buf_write_i32(resp, 0);
@@ -2363,9 +2449,6 @@ rd_kafka_mock_handle_TxnOffsetCommit(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_i16(rkbuf, &pid.epoch);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
-                int32_t GenerationId;
-                rd_kafkap_str_t kMemberId, kGroupInstanceId;
-
                 /* GenerationId */
                 rd_kafka_buf_read_i32(rkbuf, &GenerationId);
                 /* MemberId */
@@ -2390,6 +2473,21 @@ rd_kafka_mock_handle_TxnOffsetCommit(rd_kafka_mock_connection_t *mconn,
 
         if (!err)
                 err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
+
+        if (!err)
+                err = rd_kafka_mock_txn_offset_commit_check_member(
+                    mcluster, &GroupId, GenerationId, &kMemberId,
+                    &kGroupInstanceId);
+
+        /* The offsets are committed to the group when the transaction
+         * is committed (EndTxn). */
+        if (!err) {
+                mtx_lock(&mcluster->lock);
+                mtxn = rd_kafka_mock_txn_get(mcluster, &TransactionalId);
+                if (mtxn->state != RD_KAFKA_MOCK_TXN_ONGOING)
+                        mtxn = NULL;
+                mtx_unlock(&mcluster->lock);
+        }
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -2440,6 +2538,14 @@ rd_kafka_mock_handle_TxnOffsetCommit(rd_kafka_mock_connection_t *mconn,
 
                         /* CommittedMetadata */
                         rd_kafka_buf_read_str(rkbuf, &Metadata);
+
+                        if (!err && mtxn) {
+                                mtx_lock(&mcluster->lock);
+                                rd_kafka_mock_txn_offset_add(
+                                    mtxn, pid, &GroupId, &Topic, Partition,
+                                    Offset, &Metadata);
+                                mtx_unlock(&mcluster->lock);
+                        }
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
@@ -2561,6 +2667,11 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
                                                   link);
                         }
                 }
+
+                /* Commit the offsets sent with TxnOffsetCommit,
+                 * an abort discards them. */
+                if (committed)
+                        rd_kafka_mock_txn_offsets_commit(mcluster, mtxn, pid);
 
                 /* Clear transaction state BEFORE recalculating LSO,
                  * so update_lso no longer sees this txn as open. */

@@ -7,6 +7,13 @@
 * Fix the bundled zlib being built without optimisation, which slowed down
   gzip compression in self-contained builds. Happening since 1.4.0 (#5673).
 
+* Mock cluster: offsets sent with `send_offsets_to_transaction()` are now
+  committed to the group when the transaction is committed and discarded
+  when it is aborted. Previously they were never stored, so
+  `rd_kafka_committed()` returned no offset after a committed transaction.
+  `TxnOffsetCommit` also validates the member id and generation like the
+  broker does (#5652).
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

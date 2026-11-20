@@ -140,7 +140,8 @@ static void assert_topic_id_changed(const rd_kafka_Uuid_t *id_before,
 static int consume_into_msgver(rd_kafka_share_t *rkshare,
                                test_msgver_t *mv,
                                int exp_cnt,
-                               int timeout_ms) {
+                               int timeout_ms,
+                               const rd_kafka_Uuid_t *expected_topic_id) {
         rd_kafka_messages_t *batch = NULL;
         rd_ts_t deadline           = test_clock() + (rd_ts_t)timeout_ms * 1000;
         rd_kafka_t *rk             = test_share_consumer_get_rk(rkshare);
@@ -181,6 +182,18 @@ static int consume_into_msgver(rd_kafka_share_t *rkshare,
                             rd_kafka_message_delivery_count(m),
                             rd_kafka_topic_name(m->rkt), m->partition,
                             m->offset);
+
+                        if (expected_topic_id) {
+                                const rd_kafka_Uuid_t *id =
+                                    rd_kafka_message_topic_id(m);
+                                TEST_ASSERT(id != NULL,
+                                            "Delivered topic ID unavailable");
+                                TEST_ASSERT(!strcmp(rd_kafka_Uuid_base64str(id),
+                                                    rd_kafka_Uuid_base64str(
+                                                        expected_topic_id)),
+                                            "Delivered topic ID differs from "
+                                            "broker ID");
+                        }
 
                         /* msgver auto-filters by mv->testid; messages from
                          * the other phase (or untagged) are silently
@@ -388,8 +401,8 @@ static void do_test_recreate_two_phase(const char *label,
         produce_phase(topic, testid_before, PARTITION_CNT);
 
         test_msgver_init(&mv_before, testid_before);
-        got =
-            consume_into_msgver(rkshare, &mv_before, MSGS_PER_PHASE, 30 * 1000);
+        got = consume_into_msgver(rkshare, &mv_before, MSGS_PER_PHASE,
+                                  30 * 1000, id_before);
         TEST_ASSERT(got == MSGS_PER_PHASE,
                     "Phase 1: expected %d msgs matching testid_before, "
                     "got %d",
@@ -415,7 +428,7 @@ static void do_test_recreate_two_phase(const char *label,
 
         test_msgver_init(&mv_after, testid_after);
         got = consume_into_msgver(rkshare, &mv_after, msgs_per_phase_after,
-                                  60 * 1000);
+                                  60 * 1000, id_after);
         TEST_ASSERT(got == msgs_per_phase_after,
                     "Phase 2: expected %d msgs matching testid_after, "
                     "got %d (post-recreate)",
@@ -512,8 +525,8 @@ static void do_test_recreate_chaos(void) {
         produce_phase(topic, testid_warmup, PARTITION_CNT);
 
         test_msgver_init(&mv_warmup, testid_warmup);
-        got =
-            consume_into_msgver(rkshare, &mv_warmup, MSGS_PER_PHASE, 30 * 1000);
+        got = consume_into_msgver(rkshare, &mv_warmup, MSGS_PER_PHASE,
+                                  30 * 1000, NULL);
         TEST_ASSERT(got == MSGS_PER_PHASE, "Warmup: expected %d msgs, got %d",
                     MSGS_PER_PHASE, got);
         test_msgver_clear(&mv_warmup);
@@ -580,7 +593,8 @@ static void do_test_recreate_chaos(void) {
         final_msgs = current_partition_cnt * MSGS_PER_PARTITION;
 
         test_msgver_init(&mv_final, testid_final);
-        got = consume_into_msgver(rkshare, &mv_final, final_msgs, 60 * 1000);
+        got = consume_into_msgver(rkshare, &mv_final, final_msgs, 60 * 1000,
+                                  NULL);
         TEST_ASSERT(got == final_msgs,
                     "Settle: expected %d msgs matching testid_final, "
                     "got %d after %d chaos cycles",
@@ -1016,8 +1030,8 @@ static void do_test_recreate_stall_then_recover(void) {
         /* ---- Phase 1: consume the original generation ---- */
         produce_phase(topic, testid_before, PARTITION_CNT);
         test_msgver_init(&mv_before, testid_before);
-        got =
-            consume_into_msgver(rkshare, &mv_before, MSGS_PER_PHASE, 30 * 1000);
+        got = consume_into_msgver(rkshare, &mv_before, MSGS_PER_PHASE,
+                                  30 * 1000, NULL);
         TEST_ASSERT(got == MSGS_PER_PHASE, "Phase 1: expected %d msgs, got %d",
                     MSGS_PER_PHASE, got);
         test_msgver_clear(&mv_before);
@@ -1062,8 +1076,8 @@ static void do_test_recreate_stall_then_recover(void) {
         /* ---- Phase 2: records flow again ---- */
         produce_phase(topic, testid_after, PARTITION_CNT);
         test_msgver_init(&mv_after, testid_after);
-        got =
-            consume_into_msgver(rkshare, &mv_after, MSGS_PER_PHASE, 60 * 1000);
+        got = consume_into_msgver(rkshare, &mv_after, MSGS_PER_PHASE, 60 * 1000,
+                                  NULL);
         TEST_ASSERT(got == MSGS_PER_PHASE,
                     "Phase 2: expected %d msgs after recreate, got %d",
                     MSGS_PER_PHASE, got);
@@ -1149,14 +1163,19 @@ static void do_test_recreate_same_name_partition_collision(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_conf_t *producer_conf;
         rd_kafka_t *producer;
-        const char *topic          = "0184-recreate-collision";
-        const char *group          = "0184-share-recreate-collision";
-        const int n_partitions     = 3;
-        const int n_msgs_per_part  = 10;
-        const int total_per_phase  = n_partitions * n_msgs_per_part;
-        rd_kafka_messages_t *batch = NULL;
-        int old_got                = 0;
-        int new_got                = 0;
+        const char *topic                    = "0184-recreate-collision";
+        const char *group                    = "0184-share-recreate-collision";
+        const int n_partitions               = 3;
+        const int n_msgs_per_part            = 10;
+        const int total_per_phase            = n_partitions * n_msgs_per_part;
+        rd_kafka_messages_t *batch           = NULL;
+        rd_kafka_messages_t *retained_batch  = NULL;
+        rd_kafka_message_t *retained_message = NULL;
+        const rd_kafka_Uuid_t *retained_id   = NULL;
+        rd_kafka_Uuid_t *old_id              = NULL;
+        rd_kafka_Uuid_t *new_id              = NULL;
+        int old_got                          = 0;
+        int new_got                          = 0;
         rd_ts_t deadline;
         int32_t p;
         char **member_ids;
@@ -1239,11 +1258,27 @@ static void do_test_recreate_same_name_partition_collision(void) {
                 for (i = 0; i < cnt; i++) {
                         rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
                         if (!m->err) {
+                                const rd_kafka_Uuid_t *id =
+                                    rd_kafka_message_topic_id(m);
+                                TEST_ASSERT(
+                                    id != NULL,
+                                    "Old acquisition topic ID unavailable");
+                                if (!retained_batch) {
+                                        retained_batch   = batch;
+                                        retained_message = m;
+                                        retained_id      = id;
+                                        old_id = rd_kafka_Uuid_copy(id);
+                                }
+                                TEST_ASSERT(
+                                    !strcmp(rd_kafka_Uuid_base64str(id),
+                                            rd_kafka_Uuid_base64str(old_id)),
+                                    "Old partition topic IDs differ");
                                 old_got++;
                                 rd_kafka_share_acknowledge(rkshare, m);
                         }
                 }
-                rd_kafka_messages_destroy(batch);
+                if (batch != retained_batch)
+                        rd_kafka_messages_destroy(batch);
                 batch = NULL;
         }
         TEST_ASSERT(old_got == total_per_phase,
@@ -1325,6 +1360,21 @@ static void do_test_recreate_same_name_partition_collision(void) {
                 for (i = 0; i < cnt; i++) {
                         rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
                         if (!m->err) {
+                                const rd_kafka_Uuid_t *id =
+                                    rd_kafka_message_topic_id(m);
+                                TEST_ASSERT(
+                                    id != NULL,
+                                    "New acquisition topic ID unavailable");
+                                TEST_ASSERT(
+                                    strcmp(rd_kafka_Uuid_base64str(id),
+                                           rd_kafka_Uuid_base64str(old_id)),
+                                    "Recreated topic retained its old ID");
+                                if (!new_id)
+                                        new_id = rd_kafka_Uuid_copy(id);
+                                TEST_ASSERT(
+                                    !strcmp(rd_kafka_Uuid_base64str(id),
+                                            rd_kafka_Uuid_base64str(new_id)),
+                                    "New partition topic IDs differ");
                                 new_got++;
                                 rd_kafka_share_acknowledge(rkshare, m);
                         }
@@ -1339,6 +1389,16 @@ static void do_test_recreate_same_name_partition_collision(void) {
                     "suppressed the NEW rktp adds because (name, partition) "
                     "collided with OLD-id entries in rkcg_group_assignment.",
                     total_per_phase, new_got);
+        TEST_ASSERT(!strcmp(rd_kafka_Uuid_base64str(retained_id),
+                            rd_kafka_Uuid_base64str(old_id)),
+                    "Borrowed topic ID changed after topic recreation");
+        TEST_ASSERT(!strcmp(rd_kafka_Uuid_base64str(
+                                rd_kafka_message_topic_id(retained_message)),
+                            rd_kafka_Uuid_base64str(old_id)),
+                    "Retained message resolved the recreated topic ID");
+        rd_kafka_messages_destroy(retained_batch);
+        rd_kafka_Uuid_destroy(old_id);
+        rd_kafka_Uuid_destroy(new_id);
 
         for (mi = 0; mi < member_cnt; mi++)
                 rd_free(member_ids[mi]);

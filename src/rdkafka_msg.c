@@ -1623,6 +1623,27 @@ int16_t rd_kafka_message_delivery_count(const rd_kafka_message_t *rkmessage) {
 }
 
 
+const rd_kafka_Uuid_t *
+rd_kafka_message_topic_id(const rd_kafka_message_t *rkmessage) {
+        rd_kafka_msg_t *rkm;
+        rd_kafka_op_t *rko;
+
+        if (!rkmessage || rkmessage->err)
+                return NULL;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+        /* Producer _private may be application opaque, not a FETCH owner. */
+        if (rkm->rkm_flags & RD_KAFKA_MSG_F_PRODUCER)
+                return NULL;
+
+        rko = rd_kafka_message2rko((rd_kafka_message_t *)rkmessage);
+        if (!rko || RD_KAFKA_UUID_IS_ZERO(rko->rko_u.fetch.topic_id))
+                return NULL;
+
+        return &rko->rko_u.fetch.topic_id;
+}
+
+
 void rd_kafka_msgq_dump(FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
         rd_kafka_msg_t *rkm;
         int cnt = 0;

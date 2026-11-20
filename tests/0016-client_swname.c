@@ -31,6 +31,10 @@
 
 #include "rdkafka.h"
 
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
+
 /**
  * @name Verify KIP-511, client.software.name and client.software.version
  *

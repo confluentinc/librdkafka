@@ -16,7 +16,7 @@ import time
 import uuid
 
 # A Podman Docker-compatible socket is usable without changing host policy.
-if not os.environ.get("DOCKER_HOST") and not Path("/var/run/docker.sock").exists():
+if os.name == "posix" and not os.environ.get("DOCKER_HOST") and not Path("/var/run/docker.sock").exists():
     candidate = Path(f"/run/user/{os.getuid()}/podman/podman.sock")
     if candidate.exists():
         os.environ["DOCKER_HOST"] = f"unix://{candidate}"
@@ -30,6 +30,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 
 IMAGE = "apache/kafka:4.1.1"
+
+
+def require(condition, message):
+    if not condition:
+        raise AssertionError(message)
 
 
 def certificates(root):
@@ -79,6 +84,8 @@ class FaultProxy:
         self.threads = []
         self.fragment = False
         self.drop_after = None
+        self.pause_after = None
+        self.pause_hit = False
         self.dropped = False
         self.bytes_forwarded = 0
         self.thread = threading.Thread(target=self.accept, daemon=True)
@@ -106,6 +113,10 @@ class FaultProxy:
         try:
             src.settimeout(.5)
             while not self.stop.is_set():
+                if self.pause_after is not None and self.bytes_forwarded >= self.pause_after:
+                    self.pause_hit = True
+                    self.stop.wait(.01)
+                    continue
                 try:
                     block = src.recv(4096)
                 except socket.timeout:
@@ -148,9 +159,14 @@ class FaultProxy:
         self.stop.set()
         self.listener.close()
         self.disconnect()
-        self.thread.join(3)
+        deadline = time.monotonic() + 6
+        self.thread.join(max(0, deadline - time.monotonic()))
+        self.disconnect()
         for t in self.threads:
-            t.join(2)
+            t.join(max(0, deadline - time.monotonic()))
+        alive = sum(t.is_alive() for t in [self.thread] + self.threads)
+        if alive:
+            raise RuntimeError(f"proxy shutdown deadline exceeded: {alive} workers still alive")
 
 
 def upload(container, files):
@@ -168,6 +184,24 @@ def upload(container, files):
 def run_client(binary, op, conf, topic=None, timeout=85):
     args = [str(binary), op, str(conf)] + ([topic] if topic else [])
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+
+def run_purge(binary, conf, topic, proxy):
+    # Wait for the actual fault condition before allowing cancellation, rather
+    # than assuming background broker threads reached it after a fixed delay.
+    process = subprocess.Popen([str(binary), "purge", str(conf), topic],
+                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, text=True)
+    try:
+        deadline = time.monotonic() + 20
+        while not proxy.pause_hit and process.poll() is None and time.monotonic() < deadline:
+            proxy.stop.wait(.01)
+        out, err = process.communicate("purge\n", timeout=15)
+        return subprocess.CompletedProcess(process.args, process.returncode, out, err)
+    except BaseException:
+        process.kill()
+        process.communicate(timeout=5)
+        raise
 
 
 def suite(binary, root, expired_server=False, fips=False):
@@ -243,7 +277,7 @@ ssl.client.auth=required
             raise RuntimeError("authenticated Kafka readiness timed out")
         if expired_server:
             result = run_client(binary, "probe", good)
-            assert result.returncode == 3, result.stdout + result.stderr
+            require(result.returncode == 3, result.stdout + result.stderr)
             print(f"PASS {binary.name}: expired server rejected", flush=True)
             return
         cases = [
@@ -257,7 +291,7 @@ ssl.client.auth=required
         ]
         for name, changes in cases:
             result = run_client(binary, "probe", config(name, **changes))
-            assert result.returncode == 3, f"{name}: {result.returncode}\n{result.stdout}{result.stderr}"
+            require(result.returncode == 3, f"{name}: {result.returncode}\n{result.stdout}{result.stderr}")
             print(f"PASS {binary.name}: {name} rejected", flush=True)
         for op, faults in (("roundtrip", False), ("roundtrip", True), ("acks0", True)):
             proxy.fragment = faults
@@ -267,10 +301,20 @@ ssl.client.auth=required
             proxy.drop_after = 300000 if faults and op != "acks0" else None
             topic = "tls-" + uuid.uuid4().hex
             result = run_client(binary, op, good, topic)
-            assert result.returncode == 0, result.stdout + result.stderr
+            require(result.returncode == 0, result.stdout + result.stderr)
             if proxy.drop_after:
-                assert proxy.dropped, "disconnect injection was not exercised"
+                require(proxy.dropped, "disconnect injection was not exercised")
             print(f"PASS {binary.name}: {op} faults={faults}: {result.stdout.strip()}", flush=True)
+        proxy.disconnect()
+        proxy.drop_after = None
+        proxy.bytes_forwarded = 0
+        proxy.pause_after = 100000
+        proxy.pause_hit = False
+        result = run_purge(binary, good, "tls-" + uuid.uuid4().hex, proxy)
+        require(result.returncode == 0, result.stdout + result.stderr)
+        require(proxy.pause_hit, "backpressure cancellation injection was not exercised")
+        proxy.pause_after = None
+        print(f"PASS {binary.name}: {result.stdout.strip()}", flush=True)
     except BaseException:
         with contextlib.suppress(Exception):
             out, err = container.get_logs()
@@ -278,9 +322,20 @@ ssl.client.auth=required
             print((out + err).decode(errors="replace")[-18000:], flush=True)
         raise
     finally:
-        proxy.close()
-        with contextlib.suppress(Exception):
+        cleanup_errors = []
+        try:
+            proxy.close()
+        except Exception as exc:
+            cleanup_errors.append(str(exc))
+        try:
             container.stop(force=True, delete_volume=True)
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                cleanup_errors.append(f"container {container.get_container_id()} removal failed: {exc}")
+            if not cleanup_errors:
+                cleanup_errors.append(f"container teardown failed: {exc}")
+        if cleanup_errors:
+            raise RuntimeError("Acceptance cleanup failed; inspect/remove only this run: " + "; ".join(cleanup_errors))
 
 
 def main():

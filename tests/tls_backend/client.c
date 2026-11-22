@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
         const size_t size = 65536; unsigned char *payload;
         const char *topic;
         if (argc < 3) return 2;
-        ack0 = !strcmp(argv[1], "acks0");
+        ack0 = !strcmp(argv[1], "acks0") || !strcmp(argv[1], "purge");
         rk = client(argv[2], 0, ack0);
         err = rd_kafka_metadata(rk, 0, NULL, &md, 3500);
         if (err) {
@@ -86,6 +86,23 @@ int main(int argc, char **argv) {
                 if (err) { fprintf(stderr, "produce: %s\n", rd_kafka_err2str(err)); return 4; }
         }
         free(payload);
+        if (!strcmp(argv[1], "purge")) {
+                char proceed[16];
+                puts("queued records; awaiting injected backpressure");
+                fflush(stdout);
+                if (!fgets(proceed, sizeof(proceed), stdin)) return 4;
+                err = rd_kafka_purge(rk, RD_KAFKA_PURGE_F_QUEUE | RD_KAFKA_PURGE_F_INFLIGHT);
+                if (err) return 4;
+                err = rd_kafka_flush(rk, 5000);
+                rd_kafka_destroy(rk);
+                if (err || delivered + delivery_errors != count || !delivery_errors) {
+                        fprintf(stderr, "purge callbacks: sent=%d failed=%d expected=%d\n", delivered, delivery_errors, count);
+                        return 4;
+                }
+                printf("acks=0 cancellation OK: %d success, %d failed, all %d callbacks accounted\n",
+                       delivered, delivery_errors, count);
+                return 0;
+        }
         err = rd_kafka_flush(rk, 35000);
         if (err || delivered != count || delivery_errors) {
                 fprintf(stderr, "flush: %s delivered=%d errors=%d\n", rd_kafka_err2str(err), delivered, delivery_errors);
@@ -115,6 +132,25 @@ int main(int argc, char **argv) {
                                 seen[n] = 1; received++;
                         } else fprintf(stderr, "consume: %s\n", rd_kafka_message_errstr(m));
                         rd_kafka_message_destroy(m);
+                }
+                if (received == count) {
+                        int64_t low = 0, high = 0;
+                        /* A trailing replay must not hide beyond the first count records. */
+                        for (i = 0; i < 6; i++) {
+                                rd_kafka_message_t *extra = rd_kafka_consumer_poll(rk, 200);
+                                if (extra) {
+                                        if (!extra->err) {
+                                                fprintf(stderr, "unexpected trailing record\n");
+                                                return 6;
+                                        }
+                                        rd_kafka_message_destroy(extra);
+                                }
+                        }
+                        err = rd_kafka_query_watermark_offsets(rk, topic, 0, &low, &high, 5000);
+                        if (err || low != 0 || high != count) {
+                                fprintf(stderr, "partition offsets differ from exact record count\n");
+                                return 6;
+                        }
                 }
                 rd_kafka_consumer_close(rk); rd_kafka_destroy(rk);
                 if (received != count) { fprintf(stderr, "count=%d expected=%d\n", received, count); return 6; }

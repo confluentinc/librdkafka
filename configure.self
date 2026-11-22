@@ -125,11 +125,23 @@ void foo (void) {
 #endif
 void foo(void) { rustls_version(); }
 ' || exit 1
+        if [[ $MKL_DISTRO != osx && $MKL_DISTRO != mingw* ]]; then
+          mkl_compile_check rustls_hide_archives "" fail CC "-Wl,--exclude-libs,librustls.a:libcrypto.a" '
+void foo(void) { }
+' || exit 1
+          mkl_mkvar_append rustls LDFLAGS "-Wl,--exclude-libs,librustls.a:libcrypto.a"
+          mkl_mkvar_append rustls MKL_PKGCONFIG_LIBS_PRIVATE "-Wl,--exclude-libs,librustls.a:libcrypto.a"
+        fi
         mkl_compile_check rustls_fips WITH_RUSTLS_FIPS disable CC "$("$PKG_CONFIG" --cflags --libs rustls)" '
 #define DEFINE_FIPS
 #include <rustls.h>
 void foo(void) { rustls_default_fips_provider(); }
 '
+        if [[ $WITH_RUSTLS_FIPS == y ]]; then
+          # Internal archives support examples; never package them as an
+          # application link interface with unprefixed crypto symbols.
+          mkl_mkvar_set rustls MKL_NO_STATIC_INSTALL y
+        fi
         ;;
       *) mkl_err "Unknown TLS backend: $TLS_BACKEND"; exit 1 ;;
     esac

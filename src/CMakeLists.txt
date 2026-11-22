@@ -265,7 +265,7 @@ if(WITH_SSL)
 endif()
 
 if(WITH_RUSTLS)
-  target_link_libraries(rdkafka PUBLIC PkgConfig::RUSTLS)
+  target_link_libraries(rdkafka PUBLIC PkgConfig::RUSTLS ${RUSTLS_ARCHIVE_HIDE_FLAG})
 endif()
 
 if(LINK_ATOMIC)
@@ -323,6 +323,7 @@ endif()
 
 if(WITH_RUSTLS)
   string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "rustls = 0.15.7 ")
+  string(APPEND PKG_CONFIG_LIBS_PRIVATE " ${RUSTLS_ARCHIVE_HIDE_FLAG}")
 endif()
 
   if(WITH_CURL)

@@ -34,9 +34,10 @@ No complete redistributable SBOM is claimed for this experimental branch.
 
 The pinned FIPS crate is not the validated AWS-LC 4.0.0 module merely because its
 feature contains the name FIPS. Its bundled 4.2.0 snapshot differs from the
-module version identified by CMVP #5595/#5596. A policy-built system module route
-requires a separately evidenced build, headers, symbols, boundary, linkage and
-operating environment; no positive qualification is inferred here.
+module version identified by CMVP #5595/#5596. A policy-built system module route has now been built and runtime-tested against
+the exact 4.0.0 policy source; see [the experiment](EXACT-FIPS-MODULE.md). It still
+requires applicable operating-environment and deployment evidence; no positive
+qualification is inferred here.
 
 ## Build and inspect manually
 

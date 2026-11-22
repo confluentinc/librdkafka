@@ -124,6 +124,18 @@ if(RDKAFKA_TLS_BACKEND STREQUAL "rustls")
   set(WITH_SASL OFF)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(RUSTLS REQUIRED IMPORTED_TARGET rustls=0.15.7)
+  # A system AWS-LC FIPS archive has OpenSSL-compatible unprefixed symbols.
+  # Hide archive internals in ELF shared libraries and installed consumers so
+  # another crypto stack in the application cannot interpose this module.
+  set(RUSTLS_ARCHIVE_HIDE_FLAG "")
+  if(UNIX AND NOT APPLE)
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag("-Wl,--exclude-libs,librustls.a:libcrypto.a" RUSTLS_CAN_HIDE_ARCHIVES)
+    if(NOT RUSTLS_CAN_HIDE_ARCHIVES)
+      message(FATAL_ERROR "rustls requires linker support for hiding static crypto archive symbols on this platform")
+    endif()
+    set(RUSTLS_ARCHIVE_HIDE_FLAG "-Wl,--exclude-libs,librustls.a:libcrypto.a")
+  endif()
   include(CheckCSourceCompiles)
   set(CMAKE_REQUIRED_INCLUDES ${RUSTLS_INCLUDE_DIRS})
   set(CMAKE_REQUIRED_LIBRARIES PkgConfig::RUSTLS)
@@ -213,6 +225,9 @@ endif()
 # }
 
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
+if(WITH_RUSTLS_FIPS AND RDKAFKA_BUILD_STATIC)
+  message(FATAL_ERROR "rustls FIPS static librdkafka consumers are unsupported: unprefixed module symbols can resolve application OpenSSL calls. Use shared librdkafka with hidden archive internals.")
+endif()
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
 if(WIN32)

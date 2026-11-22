@@ -220,7 +220,11 @@ $(LIBNAME0)-static.pc: $(TOPDIR)/Makefile.config $(LIBNAME)-static.a
 	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
 	@echo "$$_PKG_CONFIG_STATIC_DEF" > $@
 
+ifeq ($(MKL_NO_STATIC_INSTALL),y)
+lib-gen-pkg-config: $(LIBNAME0).pc
+else
 lib-gen-pkg-config: $(LIBNAME0).pc $(LIBNAME0)-static.pc
+endif
 
 lib-clean-pkg-config:
 	rm -f $(LIBNAME0).pc $(LIBNAME0)-static.pc
@@ -269,17 +273,21 @@ lib-install:
 	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME)
 	$(INSTALL) -d $$DESTDIR$(libdir)
 	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME)
+ifneq ($(MKL_NO_STATIC_INSTALL),y)
 	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir)
 	[ ! -f $(LIBNAME)-static.a ] || $(INSTALL) $(LIBNAME)-static.a $$DESTDIR$(libdir)
+endif
 	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir)
 	[ -f "$(LIBNAME0).pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
 	)
+ifneq ($(MKL_NO_STATIC_INSTALL),y)
 	[ -f "$(LIBNAME0)-static.pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0)-static.pc $$DESTDIR$(pkgconfigdir) \
 	)
+endif
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
 
 lib-uninstall:

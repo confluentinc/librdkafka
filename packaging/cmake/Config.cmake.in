@@ -19,6 +19,11 @@ if(@WITH_ZSTD@)
   endif()
 endif()
 
+if(@WITH_RUSTLS@)
+  find_dependency(PkgConfig)
+  pkg_check_modules(RUSTLS REQUIRED IMPORTED_TARGET rustls=0.15.7)
+endif()
+
 if(@WITH_SSL@)
   if(@WITH_BUNDLED_SSL@)
     # TODO: custom SSL library should be installed

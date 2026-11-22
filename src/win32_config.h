@@ -34,6 +34,9 @@
 
 #ifndef WITHOUT_WIN32_CONFIG
 #define WITH_SSL              1
+#define WITH_TLS              1
+#define WITH_RUSTLS           0
+#define WITH_RUSTLS_FIPS      0
 #define WITH_ZLIB             1
 #define WITH_SNAPPY           1
 #define WITH_ZSTD             1

@@ -29,6 +29,8 @@ verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
 
+mkl_option "Feature" TLS_BACKEND "--with-tls-backend=BACKEND" "Broker TLS backend: openssl, rustls, none" "openssl"
+
 mkl_toggle_option "Development" ENABLE_DEVEL "--enable-devel" "Enable development asserts, checks, etc" "n"
 mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
 
@@ -103,7 +105,39 @@ void foo (void) {
 
     # optional libs
     mkl_check "zlib"
-    mkl_check "libssl"
+    case "$TLS_BACKEND" in
+      openssl) mkl_check "libssl" ;;
+      none) mkl_allvar_set WITH_SSL WITH_SSL n ;;
+      rustls)
+        mkl_allvar_set WITH_SSL WITH_SSL n
+        mkl_allvar_set WITH_RUSTLS WITH_RUSTLS y
+        # Keep this artifact broker-only; do not pull in curl/Kerberos crypto.
+        ENABLE_CURL=n
+        ENABLE_GSSAPI=n
+        if ! "$PKG_CONFIG" --exact-version=0.15.7 rustls; then
+          mkl_err "rustls backend requires rustls-ffi exactly 0.15.7 via pkg-config"
+          exit 1
+        fi
+        mkl_pkg_config_check rustls WITH_RUSTLS fail CC '
+#include <rustls.h>
+#if RUSTLS_VERSION_NUMBER != 0x000f0700
+#error Wrong rustls-ffi header version
+#endif
+void foo(void) { rustls_version(); }
+' || exit 1
+        mkl_compile_check rustls_fips WITH_RUSTLS_FIPS disable CC "$("$PKG_CONFIG" --cflags --libs rustls)" '
+#define DEFINE_FIPS
+#include <rustls.h>
+void foo(void) { rustls_default_fips_provider(); }
+'
+        ;;
+      *) mkl_err "Unknown TLS backend: $TLS_BACKEND"; exit 1 ;;
+    esac
+    if [[ $WITH_SSL == y || $WITH_RUSTLS == y ]]; then
+      mkl_allvar_set WITH_TLS WITH_TLS y
+    else
+      mkl_allvar_set WITH_TLS WITH_TLS n
+    fi
     mkl_check "libsasl2"
     mkl_check "libzstd"
     mkl_check "libcurl"

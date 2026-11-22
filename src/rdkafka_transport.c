@@ -431,6 +431,26 @@ ssize_t rd_kafka_transport_recv(rd_kafka_transport_t *rktrans,
 
 
 /**
+ * @brief Whether removing this request requires disconnecting the stream.
+ *
+ * A backend may have accepted plaintext while deliberately leaving the slice
+ * offset unchanged until its ciphertext is flushed. Timeout and purge must
+ * recognize that state before releasing the request, independently of the
+ * configured socket.max.fails threshold.
+ */
+rd_bool_t rd_kafka_transport_request_has_started(rd_kafka_transport_t *rktrans,
+                                                 const rd_slice_t *slice) {
+        if (rd_slice_offset(slice) > 0)
+                return rd_true;
+#if WITH_TLS
+        if (rktrans && rktrans->rktrans_tls &&
+            rd_kafka_tls_ops->send_pending)
+                return rd_kafka_tls_ops->send_pending(rktrans, slice);
+#endif
+        return rd_false;
+}
+
+/**
  * @brief Notify transport layer of full request sent.
  */
 void rd_kafka_transport_request_sent(rd_kafka_broker_t *rkb,

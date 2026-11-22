@@ -54,6 +54,10 @@ typedef struct rd_kafka_tls_ops_s {
         rd_bool_t (*pending)(rd_kafka_transport_t *);
         int (*interests)(rd_kafka_transport_t *);
         int (*serve)(rd_kafka_transport_t *, int, char *, size_t);
+        /* An accepted-but-uncommitted prefix belongs to this request. The
+         * broker must treat cancellation/timeout as a partially sent request
+         * even if the externally visible slice offset is still zero. */
+        rd_bool_t (*send_pending)(rd_kafka_transport_t *, const rd_slice_t *);
 } rd_kafka_tls_ops_t;
 
 extern const rd_kafka_tls_ops_t rd_kafka_openssl_ops;

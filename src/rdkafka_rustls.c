@@ -657,6 +657,12 @@ static int rd_kafka_rustls_serve(rd_kafka_transport_t *t, int events,
                 return rd_kafka_rustls_flush(t, errstr, errstr_size);
         return 0;
 }
+static rd_bool_t rd_kafka_rustls_send_pending(rd_kafka_transport_t *t,
+                                              const rd_slice_t *slice) {
+        rd_kafka_rustls_session_t *s = t->rktrans_tls;
+        return s->pending_n && s->pending_buf == slice->buf &&
+               s->pending_offset == rd_slice_abs_offset(slice);
+}
 static void rd_kafka_rustls_global_noop(void) {
 }
 
@@ -666,4 +672,5 @@ const rd_kafka_tls_ops_t rd_kafka_rustls_ops = {
     rd_kafka_rustls_close, rd_kafka_rustls_connect,
     rd_kafka_rustls_handshake, rd_kafka_rustls_send,
     rd_kafka_rustls_recv, rd_kafka_rustls_pending,
-    rd_kafka_rustls_interests, rd_kafka_rustls_serve};
+    rd_kafka_rustls_interests, rd_kafka_rustls_serve,
+    rd_kafka_rustls_send_pending};

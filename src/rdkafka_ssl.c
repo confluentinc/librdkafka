@@ -2707,4 +2707,4 @@ const rd_kafka_tls_ops_t rd_kafka_openssl_ops = {
     rd_kafka_transport_ssl_close, rd_kafka_transport_ssl_connect,
     rd_kafka_transport_ssl_handshake, rd_kafka_transport_ssl_send,
     rd_kafka_transport_ssl_recv, rd_kafka_openssl_pending,
-    rd_kafka_openssl_interests, rd_kafka_openssl_serve};
+    rd_kafka_openssl_interests, rd_kafka_openssl_serve, NULL};

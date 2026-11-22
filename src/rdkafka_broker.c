@@ -943,7 +943,8 @@ static int rd_kafka_broker_bufq_purge_by_toppar(rd_kafka_broker_t *rkb,
                     /* Skip partially sent buffers and let them transmit.
                      * The alternative would be to kill the connection here,
                      * which is more drastic and costly. */
-                    rd_slice_offset(&rkbuf->rkbuf_reader) > 0)
+                    rd_kafka_transport_request_has_started(
+                        rkb->rkb_transport, &rkbuf->rkbuf_reader))
                         continue;
 
                 rd_kafka_bufq_deq(rkbq, rkbuf);
@@ -1000,7 +1001,9 @@ restart:
                 if (ApiKey != -1 && rkbuf->rkbuf_reqhdr.ApiKey != ApiKey)
                         continue;
 
-                if (partial_cntp && rd_slice_offset(&rkbuf->rkbuf_reader) > 0)
+                if (partial_cntp &&
+                    rd_kafka_transport_request_has_started(
+                        rkb->rkb_transport, &rkbuf->rkbuf_reader))
                         (*partial_cntp)++;
 
                 /* Convert rkbuf_ts_sent to elapsed time since request */

@@ -126,6 +126,7 @@ int main(int argc, char **argv) {
                 rd_kafka_conf_destroy(unsupported);
         }
         rk.rk_conf = *conf;
+        rk.rk_conf.socket_max_fails = 0;
         rk.rk_conf.ssl.ca_pem = "conflicting CA source";
         CHECK(rd_kafka_rustls_unsupported(&rk, err, sizeof(err)) == -1);
         CHECK(strstr(err, "mutually exclusive"));
@@ -183,6 +184,12 @@ int main(int argc, char **argv) {
         CHECK(rd_kafka_rustls_send(&client, &slice, err, sizeof(err)) == 0);
         CHECK(cs->pending_n > 0 && cs->pending_n <= RD_KAFKA_RUSTLS_CHUNK);
         CHECK(rd_slice_offset(&slice) == 0);
+        /* Both broker timeout scanning and queue/partition purge use this
+         * predicate. Even with socket.max.fails=0, this request must count
+         * as partial so timeout/queue purge disconnects and partition purge
+         * leaves it in place rather than releasing its backing buffer. */
+        CHECK(rk.rk_conf.socket_max_fails == 0);
+        CHECK(rd_kafka_transport_request_has_started(&client, &slice));
         n = cs->pending_n;
         for (i = 0; i < 3; i++) {
                 CHECK(rd_kafka_rustls_send(&client, &slice, err, sizeof(err)) == 0);
@@ -205,6 +212,9 @@ int main(int argc, char **argv) {
                 CHECK(rd_kafka_rustls_input(&server, err, sizeof(err)) >= 0);
         }
         CHECK(i < 100000 && cs->pending_n == n && rd_slice_offset(&slice) == 0);
+        /* Flushing independently still requires pending commitment before
+         * the request can safely be removed from the broker queue. */
+        CHECK(rd_kafka_transport_request_has_started(&client, &slice));
 
         for (i = 0; i < 200000 &&
                     (rd_slice_remains(&slice) || received < sizeof(payload)); i++) {
@@ -296,7 +306,8 @@ int main(int argc, char **argv) {
         printf("transport invariants OK: short_writes=%d fragments=%d "
                "forced_EAGAIN=%d; exact bytes, deferred slice commit, "
                "empty-queue flush, buffered plaintext, bounded pending "
-               "prefix, close-notify, handshake EOF and partial cleanup\n",
+               "prefix, timeout/purge boundary with socket.max.fails=0, "
+               "close-notify, handshake EOF and partial cleanup\n",
                short_writes, fragmented_reads, blocked_writes);
         return 0;
 }

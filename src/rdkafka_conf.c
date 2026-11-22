@@ -241,7 +241,6 @@ struct rd_kafka_property {
         .unsupported = "cyrus-sasl/libsasl2 not available at build time"
 #endif
 
-#define _UNSUPPORTED_OAUTHBEARER _UNSUPPORTED_SSL
 
 
 static rd_kafka_conf_res_t

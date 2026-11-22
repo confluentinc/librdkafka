@@ -65,5 +65,7 @@ prefix. Run it in a copied checkout because mklove generates source-local
 `make -j4` then builds C and C++ libraries. Use `--with-tls-backend=none` or
 `openssl` for the other configurations. The checked-in Visual Studio projects
 retain OpenSSL and now include the common TLS dispatcher; rustls Windows builds
-must use CMake and matching target dependency metadata. Native Windows/macOS
-execution and distribution packaging remain pending.
+must use CMake and matching target dependency metadata. Windows x64 builds and
+runtime tests passed, including a FIPS FFI build that needs Perl and ships
+`aws_lc_fips_0_14_3_crypto.dll`; see [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md).
+Native macOS execution and distribution packaging remain pending.

@@ -159,16 +159,31 @@ through `tests/tls_backend/focused.py`, `fips_checks.py` and `timeout_check.py`.
 - ASan/UBSan execution was unavailable because this host's GCC sanitizer library
   symlinks reference missing runtime files. Sanitizer execution remains pending.
 
+## Native Windows x64 results
+
+On 2026-11-22 a disposable Windows Server 2022 x64 VM built and ran this
+branch with MSVC 14.44. The `win32` MSBuild solution and the CMake `openssl`,
+`none` and `rustls` builds passed. A rustls build with rustls-ffi 0.15.7 from
+source (`fips,aws-lc-rs`, bundled aws-lc-fips-sys 0.14.3) detected
+`WITH_RUSTLS_FIPS=1`. The policy, certificate-buffer, handshake-deadline and
+real Kafka acceptance tests passed for OpenSSL, ordinary rustls and rustls
+FIPS. The rustls FIPS client also passed acceptance with `--fips`. Kafka ran in
+containers on a separate Linux Docker host, and the clients and fault proxy ran
+on Windows. On Windows the FIPS module is a separate DLL with prefixed names,
+and `rdkafka.dll` exports no crypto names. Commands, linkage facts and open
+items are in [Windows checks](../packaging/rustls/WINDOWS-CHECKS.md).
+
 ## Unmet criteria and limitations
 
-Native Windows/macOS execution and installed-package qualification remain unmet;
-no native host was available. Cross compilation and CI configuration are not
+Native macOS execution and installed-package qualification remain unmet; no
+native macOS host was available. Windows x64 has build and runtime evidence
+only (see above). Cross compilation and CI configuration are not
 reported as passed tests. Neither the Fedora OpenSSL provider nor this Fedora
 AWS-LC build is established as a policy-covered deployment tuple. Required-mode
 runtime behavior passed; module identity, operating environment, linkage/service
 review, release signatures/SBOM and qualification remain open.
 
-Rustls Windows/macOS FIPS linkage/distribution, platform trust, CRLs, optional
+Rustls Windows/macOS FIPS distribution, macOS FIPS linkage, platform trust, CRLs, optional
 client-auth issuer parity, broader authentication/HTTPS, complete downstream
 bindings coverage, IPv6/trailing-dot acceptance, sanitizer runs and sustained
 throughput/tail-latency/RSS comparisons remain pending or explicitly unsupported.
@@ -214,6 +229,7 @@ The tested branch was pushed to
 Remote SHA verification matched the local implementation/documentation commit
 `99bde1a334d080a96b16e35aeeddcf284d99c1e8`; the final delivery-checklist commit
 only updates this record. No merge, release, upstream write or PR was performed.
-No native Windows/macOS execution host was configured in this session. The
+No native Windows/macOS execution host was configured in this session; a later
+Windows x64 run is recorded above. The
 isolated test API service was stopped after acceptance; dependency/build evidence
 remains outside git for manual reuse.

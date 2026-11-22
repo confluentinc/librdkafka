@@ -175,12 +175,13 @@ pending state belonging to the failed connection.
 
 ```text
 Build / feature                  Linux native    Windows          macOS
-OpenSSL ordinary                 tested          definitions      not executed
-No TLS                           tested          definitions      not executed
-rustls ordinary broker TLS/mTLS   tested          CMake path only  CMake path only
-OpenSSL required runtime policy   see results     not executed     not executed
-ordinary FFI required-mode       refusal tested  not executed     not executed
+OpenSSL ordinary                 tested          tested (x64)     not executed
+No TLS                           tested          tested (x64)     not executed
+rustls ordinary broker TLS/mTLS   tested          tested (x64)     CMake path only
+OpenSSL required runtime policy   see results     refusal tested   not executed
+ordinary FFI required-mode       refusal tested  refusal tested   not executed
 exact AWS-LC required-mode        runtime tested  not executed     not executed
+aws-lc-fips-sys 0.14.3 required   not executed    runtime tested   not executed
 Qualified FIPS deployment         none claimed    none claimed     none claimed
 ```
 
@@ -199,10 +200,13 @@ CRLs and directory trust are not implemented. The profile is tested with require
 mutual authentication; do not infer parity for optional-auth plus SASL.
 
 Windows Visual Studio defaults remain OpenSSL and include the private dispatcher.
-Existing vcpkg/NuGet/release packaging does not publish rustls variants. A new
-Windows/macOS rustls package needs exact FFI linkage/deployment rules and native
-installed-consumer tests before being advertised. Cross-platform source paths or
-configured build files are not passed native tests.
+Existing vcpkg/NuGet/release packaging does not publish rustls variants. Windows
+x64 CMake builds with rustls and rustls FIPS passed native runtime tests; see
+[Windows checks](../packaging/rustls/WINDOWS-CHECKS.md) for the DLLs to ship and
+the hand-written FIPS pkg-config file. A Windows/macOS rustls package still
+needs deployment rules and native installed-consumer tests before being
+advertised. Cross-platform source paths or configured build files are not
+passed native tests.
 
 ## Optional positive OpenSSL required-mode checks
 

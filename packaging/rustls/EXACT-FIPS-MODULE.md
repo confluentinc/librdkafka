@@ -167,5 +167,7 @@ bindings and unchanged module boundary; preserve installed binary/module hashes
 and full final link maps; collect required service and self-test evidence;
 qualify TLS/mTLS certificates, algorithms and keys; review the hidden shared
 wrapper's module-boundary treatment with the deployment owner. Windows/macOS
-require separate module/environment evidence and linkage work. No module,
+require separate module/environment evidence and linkage work. A Windows x64
+linkage run with the bundled aws-lc-fips-sys module, not this exact source, is
+in [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md). No module,
 operating environment or version was substituted as validation evidence here.

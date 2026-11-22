@@ -31,7 +31,8 @@ Branch: `feat/tls-backends-fips`. Preserve the original checkout and public ABI.
 - [x] FIPS requirement refusal, insecure/unsupported options, isolation/no fallback.
 - [x] Positive required-mode runtime tests with OpenSSL and exact-source AWS-LC 4.0.0.
 - [ ] Policy-covered operating environment, release artifact/service evidence and qualification.
-- [ ] Native Windows/macOS (pending hosts); distinguish build configuration from execution.
+- [x] Native Windows x64 build and execution ([Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)).
+- [ ] Native macOS (pending host); distinguish build configuration from execution.
 - [x] Dependency/linkage inventory and qualification checklist, independent review.
 - [x] Coherent commits pushed to origin; no merge, release, upstream write or PR.
 

@@ -83,10 +83,12 @@ the observed approved-mode enforcement path.
 See the main guide for integrated Kafka acceptance and build-matrix results.
 A positive rustls FIPS runtime artifact was subsequently built using the exact
 AWS-LC 4.0.0 policy source; its results and restrictions are recorded in
-`packaging/rustls/EXACT-FIPS-MODULE.md`. Native Windows/macOS execution, applicable
-operating-environment evidence and deployment qualification remain separate
-requirements. Linux socketpair and real Kafka tests do not establish
-Windows edge-triggered socket behavior or a performance qualification.
+`packaging/rustls/EXACT-FIPS-MODULE.md`. A Windows x64 runtime run with the
+aws-lc-fips-sys 0.14.3 module is recorded in `packaging/rustls/WINDOWS-CHECKS.md`.
+Native macOS execution, applicable operating-environment evidence and deployment
+qualification remain separate requirements. The Windows run used real Kafka and
+the fault proxy, not the socketpair test, so it does not establish all Windows
+socket edge cases or a performance qualification.
 
 ## Manual policy verification
 

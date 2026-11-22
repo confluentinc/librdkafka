@@ -108,6 +108,8 @@ those unrelated services.
       controls against the final installed package, without fallback.
 - [ ] Repeat on native Linux, Windows and macOS target tuples and downstream
       bindings/packages; a configured CI job or cross build is not native execution.
+      Windows x64 engineering runs are in `packaging/rustls/WINDOWS-CHECKS.md`;
+      they are not qualification evidence.
 - [ ] Review SCRAM/PBKDF, OIDC/HTTPS, platform trust, optional auth and all future
       capabilities before admitting them into the strict scope.
 - [ ] Associate results with the exact released artifact, qualification owner and

@@ -1,8 +1,8 @@
 # Build integration checks, Linux x86_64, 2026-11-22
 
 These checks ran on the implementation worktree based on
-`ad4391a0e433a275f4c07a26f98ad70142b3e3a0`. Native Windows/macOS and cross builds
-were not run. This is engineering evidence, not module qualification.
+`ad4391a0e433a275f4c07a26f98ad70142b3e3a0`. Native macOS and cross builds
+were not run. Native Windows x64 checks are in [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md). This is engineering evidence, not module qualification.
 
 Passed:
 

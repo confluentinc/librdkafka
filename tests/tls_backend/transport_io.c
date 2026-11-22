@@ -37,8 +37,9 @@
 
 static int client_fd;
 static int block_client_writes;
-static int short_writes, fragmented_reads, blocked_writes, read_calls;
+static int short_writes, fragmented_reads, blocked_writes, read_calls, send_calls;
 static ssize_t fault_send(int fd, const void *buf, size_t n, int flags) {
+        send_calls++;
         if (fd == client_fd && block_client_writes) {
                 blocked_writes++;
                 errno = EAGAIN;
@@ -88,6 +89,44 @@ static int pump(rd_kafka_transport_t *a, rd_kafka_transport_t *b,
         return n + m;
 }
 
+static int pair_new(rd_kafka_transport_t *client,
+                     rd_kafka_transport_t *server,
+                     const struct rustls_client_config *config,
+                     const struct rustls_server_config *sc,
+                     int sockets[2], char *err, size_t err_size) {
+        rd_kafka_rustls_session_t *cs, *ss;
+        int i, small = 1024;
+        memset(client, 0, sizeof(*client));
+        memset(server, 0, sizeof(*server));
+        CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
+        client_fd = sockets[0];
+        for (i = 0; i < 2; i++) {
+                CHECK(fcntl(sockets[i], F_SETFL,
+                            fcntl(sockets[i], F_GETFL) | O_NONBLOCK) == 0);
+                CHECK(setsockopt(sockets[i], SOL_SOCKET, SO_SNDBUF, &small,
+                                 sizeof(small)) == 0);
+        }
+        client->rktrans_s = sockets[0];
+        server->rktrans_s = sockets[1];
+        client->rktrans_tls = cs = rd_calloc(1, sizeof(*cs));
+        server->rktrans_tls = ss = rd_calloc(1, sizeof(*ss));
+        OK(rustls_client_connection_new(config, "localhost",
+                                         &cs->conn));
+        OK(rustls_server_connection_new(sc, &ss->conn));
+        rustls_connection_set_buffer_limit(cs->conn, RD_KAFKA_RUSTLS_BUFFER_LIMIT);
+        rustls_connection_set_buffer_limit(ss->conn, RD_KAFKA_RUSTLS_BUFFER_LIMIT);
+        for (i = 0; i < 100000; i++) {
+                CHECK(pump(client, server, err, err_size) >= 0);
+                if (!rustls_connection_is_handshaking(cs->conn) &&
+                    !rustls_connection_is_handshaking(ss->conn) &&
+                    !rustls_connection_wants_write(cs->conn) &&
+                    !rustls_connection_wants_write(ss->conn))
+                        break;
+        }
+        CHECK(i < 100000);
+        return 0;
+}
+
 int main(int argc, char **argv) {
         rd_kafka_t rk;
         rd_kafka_conf_t *conf;
@@ -101,7 +140,7 @@ int main(int argc, char **argv) {
         char *cert_pem, *key_pem;
         size_t cert_len, key_len, n, received = 0;
         char err[512] = "";
-        int sockets[2], i, small = 1024, calls;
+        int sockets[2], i, calls;
         rd_buf_t sendbuf, recvbuf;
         rd_slice_t slice;
         unsigned char payload[131071], received_payload[sizeof(payload)] = {0};
@@ -145,33 +184,39 @@ int main(int argc, char **argv) {
         OK(rustls_server_config_builder_build(sb, &sc));
         rustls_certified_key_free(key);
         rustls_crypto_provider_free(provider);
-        CHECK(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0);
-        client_fd = sockets[0];
-        for (i = 0; i < 2; i++) {
-                CHECK(fcntl(sockets[i], F_SETFL,
-                            fcntl(sockets[i], F_GETFL) | O_NONBLOCK) == 0);
-                CHECK(setsockopt(sockets[i], SOL_SOCKET, SO_SNDBUF, &small,
-                                 sizeof(small)) == 0);
-        }
-        client.rktrans_s = sockets[0];
-        server.rktrans_s = sockets[1];
-        client.rktrans_tls = cs = rd_calloc(1, sizeof(*cs));
-        server.rktrans_tls = ss = rd_calloc(1, sizeof(*ss));
-        OK(rustls_client_connection_new(rk.rk_conf.ssl.tls_ctx, "localhost",
-                                         &cs->conn));
-        OK(rustls_server_connection_new(sc, &ss->conn));
-        rustls_server_config_free(sc);
-        rustls_connection_set_buffer_limit(cs->conn, RD_KAFKA_RUSTLS_BUFFER_LIMIT);
-        rustls_connection_set_buffer_limit(ss->conn, RD_KAFKA_RUSTLS_BUFFER_LIMIT);
-        for (i = 0; i < 100000; i++) {
-                CHECK(pump(&client, &server, err, sizeof(err)) >= 0);
-                if (!rustls_connection_is_handshaking(cs->conn) &&
-                    !rustls_connection_is_handshaking(ss->conn) &&
-                    !rustls_connection_wants_write(cs->conn) &&
-                    !rustls_connection_wants_write(ss->conn))
-                        break;
-        }
-        CHECK(i < 100000);
+        CHECK(pair_new(&client, &server, rk.rk_conf.ssl.tls_ctx, sc,
+                        sockets, err, sizeof(err)) == 0);
+        cs = client.rktrans_tls;
+        ss = server.rktrans_tls;
+
+        /* Cancel a prefix accepted at offset zero while writes are blocked.
+         * Teardown must discard it even if the socket becomes writable before
+         * close: a successful close_notify flush must not send canceled data. */
+        rd_buf_init(&sendbuf, 1, 64);
+        rd_buf_write(&sendbuf, "canceled-prefix", 15);
+        rd_slice_init_full(&slice, &sendbuf);
+        block_client_writes = 1;
+        CHECK(rd_kafka_rustls_send(&client, &slice, err, sizeof(err)) == 0);
+        CHECK(cs->pending_n && rd_slice_offset(&slice) == 0);
+        CHECK(rd_kafka_transport_request_has_started(&client, &slice));
+        block_client_writes = 0;
+        calls = send_calls;
+        rd_kafka_rustls_close(&client);
+        CHECK(send_calls == calls);
+        close(sockets[0]);
+        rd_buf_init(&recvbuf, 1, 64);
+        rd_buf_write_ensure(&recvbuf, 64, 64);
+        CHECK(rd_kafka_rustls_recv(&server, &recvbuf, err, sizeof(err)) == -1);
+        CHECK(rd_buf_len(&recvbuf) == 0);
+        rd_buf_destroy(&recvbuf);
+        rd_buf_destroy(&sendbuf);
+        rd_kafka_rustls_close(&server);
+        close(sockets[1]);
+
+        CHECK(pair_new(&client, &server, rk.rk_conf.ssl.tls_ctx, sc,
+                        sockets, err, sizeof(err)) == 0);
+        cs = client.rktrans_tls;
+        ss = server.rktrans_tls;
         for (i = 0; i < (int)sizeof(payload); i++)
                 payload[i] = (unsigned char)(i * 31 + i / 97);
         rd_buf_init(&sendbuf, 1, sizeof(payload));
@@ -301,13 +346,15 @@ int main(int argc, char **argv) {
         client.rktrans_tls = rd_calloc(1, sizeof(*cs));
         rd_kafka_rustls_close(&client);
         CHECK(!client.rktrans_tls);
+        rustls_server_config_free(sc);
         rd_kafka_rustls_ctx_term(&rk);
         rd_kafka_conf_destroy(conf);
         printf("transport invariants OK: short_writes=%d fragments=%d "
                "forced_EAGAIN=%d; exact bytes, deferred slice commit, "
                "empty-queue flush, buffered plaintext, bounded pending "
                "prefix, timeout/purge boundary with socket.max.fails=0, "
-               "close-notify, handshake EOF and partial cleanup\n",
+               "cancellation discards ciphertext, close-notify, "
+               "handshake EOF and partial cleanup\n",
                short_writes, fragmented_reads, blocked_writes);
         return 0;
 }

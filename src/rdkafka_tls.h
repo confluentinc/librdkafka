@@ -58,6 +58,7 @@ typedef struct rd_kafka_tls_ops_s {
          * broker must treat cancellation/timeout as a partially sent request
          * even if the externally visible slice offset is still zero. */
         rd_bool_t (*send_pending)(rd_kafka_transport_t *, const rd_slice_t *);
+        void (*thread_term)(void);
 } rd_kafka_tls_ops_t;
 
 extern const rd_kafka_tls_ops_t rd_kafka_openssl_ops;
@@ -65,6 +66,7 @@ extern const rd_kafka_tls_ops_t rd_kafka_rustls_ops;
 extern const rd_kafka_tls_ops_t *const rd_kafka_tls_ops;
 void rd_kafka_tls_init(void);
 void rd_kafka_tls_term(void);
+void rd_kafka_tls_thread_term(void);
 int rd_kafka_tls_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size);
 void rd_kafka_tls_ctx_term(rd_kafka_t *rk);
 #endif

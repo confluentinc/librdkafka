@@ -2701,10 +2701,18 @@ static int rd_kafka_openssl_serve(rd_kafka_transport_t *t, int events,
                                  char *errstr, size_t errstr_size) {
         return 0;
 }
+static void rd_kafka_openssl_thread_term(void) {
+        /* Modern OpenSSL performs thread cleanup itself. */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
+#elif OPENSSL_VERSION_NUMBER >= 0x10000000L
+        ERR_remove_thread_state(NULL);
+#endif
+}
 const rd_kafka_tls_ops_t rd_kafka_openssl_ops = {
     "openssl", rd_kafka_ssl_init, rd_kafka_ssl_term,
     rd_kafka_ssl_ctx_init, rd_kafka_ssl_ctx_term,
     rd_kafka_transport_ssl_close, rd_kafka_transport_ssl_connect,
     rd_kafka_transport_ssl_handshake, rd_kafka_transport_ssl_send,
     rd_kafka_transport_ssl_recv, rd_kafka_openssl_pending,
-    rd_kafka_openssl_interests, rd_kafka_openssl_serve, NULL};
+    rd_kafka_openssl_interests, rd_kafka_openssl_serve, NULL,
+    rd_kafka_openssl_thread_term};

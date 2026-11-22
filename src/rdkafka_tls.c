@@ -45,6 +45,9 @@ void rd_kafka_tls_init(void) {
 void rd_kafka_tls_term(void) {
         rd_kafka_tls_ops->global_term();
 }
+void rd_kafka_tls_thread_term(void) {
+        rd_kafka_tls_ops->thread_term();
+}
 int rd_kafka_tls_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         return rd_kafka_tls_ops->ctx_init(rk, errstr, errstr_size);
 }

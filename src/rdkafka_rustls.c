@@ -471,8 +471,15 @@ static void rd_kafka_rustls_close(rd_kafka_transport_t *t) {
                 return;
         if (s->conn) {
                 char ignored[256];
-                rustls_connection_send_close_notify(s->conn);
-                rd_kafka_rustls_flush(t, ignored, sizeof(ignored));
+                /* Cancellation/timeout may have removed a request whose
+                 * accepted prefix has not been committed. Never flush that
+                 * application ciphertext during teardown. Handshake output
+                 * is likewise discarded on an incomplete connection. */
+                if (!s->pending_n &&
+                    !rustls_connection_is_handshaking(s->conn)) {
+                        rustls_connection_send_close_notify(s->conn);
+                        rd_kafka_rustls_flush(t, ignored, sizeof(ignored));
+                }
                 rustls_connection_free(s->conn);
         }
         rd_free(s);
@@ -673,4 +680,4 @@ const rd_kafka_tls_ops_t rd_kafka_rustls_ops = {
     rd_kafka_rustls_handshake, rd_kafka_rustls_send,
     rd_kafka_rustls_recv, rd_kafka_rustls_pending,
     rd_kafka_rustls_interests, rd_kafka_rustls_serve,
-    rd_kafka_rustls_send_pending};
+    rd_kafka_rustls_send_pending, rd_kafka_rustls_global_noop};

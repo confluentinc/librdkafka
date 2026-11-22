@@ -102,6 +102,10 @@ If the version is out of date, please [create an issue or pull request](https://
 
 ## Build from source
 
+This experimental branch also provides [build-selected OpenSSL/rustls broker TLS
+and an opt-in FIPS enforcement profile](docs/TLS-BACKENDS.md), with real Kafka
+Testcontainers tests and explicit qualification limits.
+
 ### Requirements
 	The GNU toolchain
 	GNU make

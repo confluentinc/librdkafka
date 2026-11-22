@@ -38,6 +38,14 @@ CMVP certificate.
   associated with the original request and offset, is submitted only once, and
   advances the caller slice only after ciphertext drains to the socket. This
   preserves the existing request-sent and `acks=0` delivery eligibility point.
+- Accepted-but-uncommitted rustls prefixes now count as partially started
+  requests for timeout, purge, partition purge and termination. Teardown drops
+  buffered application/handshake output rather than flushing canceled bytes.
+  Deterministic cancellation tests assert zero write callbacks and zero app
+  bytes after unblocking immediately before close.
+- Exact-system AWS-LC archive symbols are hidden inside the shared wrapper;
+  unsafe FIPS static-consumer packaging is rejected. Mixed OpenSSL/shared-rustls
+  process tests verify both library orders and the real OpenSSL version.
 - Rustls alternative credential/trust sources are mutually exclusive, avoiding
   silent precedence differences from OpenSSL. Temporary private-key and Base64
   buffers are wiped. Authentication feature reporting is gated by implemented
@@ -73,9 +81,11 @@ an isolated client configuration. Its successful runtime test establishes only
 the observed approved-mode enforcement path.
 
 See the main guide for integrated Kafka acceptance and build-matrix results.
-Native Windows/macOS execution, a positive rustls FIPS artifact, applicable
-module identity/environment evidence and deployment qualification remain
-separate requirements. Linux socketpair and real Kafka tests do not establish
+A positive rustls FIPS runtime artifact was subsequently built using the exact
+AWS-LC 4.0.0 policy source; its results and restrictions are recorded in
+`packaging/rustls/EXACT-FIPS-MODULE.md`. Native Windows/macOS execution, applicable
+operating-environment evidence and deployment qualification remain separate
+requirements. Linux socketpair and real Kafka tests do not establish
 Windows edge-triggered socket behavior or a performance qualification.
 
 ## Manual policy verification

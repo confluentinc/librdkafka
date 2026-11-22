@@ -1,6 +1,7 @@
 /* Standalone policy/certificate lifetime regression test: no broker required.
  * Link against the library under test. argv[1] is a PEM test CA; argv[2] is
  * "unavailable" (default) or "available" for an installed FIPS provider.
+ * Optional argv[3] is a PEM private key for import-provenance regression.
  * This test does not assert CMVP qualification. */
 #include "../src/rdkafka.h"
 #include <stdio.h>
@@ -111,6 +112,58 @@ int main(int argc, char **argv) {
         }
 
         ordinary_tls(argv[1]);
+        if (argc > 3) {
+                FILE *key_file = fopen(argv[3], "rb");
+                long key_length;
+                unsigned char *key;
+                volatile unsigned char *wipe;
+                size_t j;
+                check(key_file != NULL, "open test private key");
+                check(fseek(key_file, 0, SEEK_END) == 0, "seek private key");
+                key_length = ftell(key_file);
+                check(key_length > 0 && key_length < 1024 * 1024,
+                      "test private key size");
+                rewind(key_file);
+                key = malloc((size_t)key_length);
+                check(key != NULL, "allocate private key buffer");
+                check(fread(key, 1, (size_t)key_length, key_file) ==
+                          (size_t)key_length, "read private key");
+                fclose(key_file);
+                conf = strict(argv[1]);
+                {
+                        rd_kafka_conf_t *probe = rd_kafka_conf_new();
+                        char ignored[512];
+                        int openssl = rd_kafka_conf_set(
+                            probe, "ssl.providers", "default", ignored,
+                            sizeof(ignored)) == RD_KAFKA_CONF_OK;
+                        rd_kafka_conf_res_t result;
+                        rd_kafka_conf_destroy(probe);
+                        result = rd_kafka_conf_set_ssl_cert(
+                            conf, RD_KAFKA_CERT_PRIVATE_KEY,
+                            RD_KAFKA_CERT_ENC_PEM, key, (size_t)key_length,
+                            error, sizeof(error));
+                        if (openssl || !available)
+                                check(result == RD_KAFKA_CONF_INVALID,
+                                      "strict private-key setter must refuse "
+                                      "unqualified parsing/provider");
+                        else
+                                check(result == RD_KAFKA_CONF_OK, error);
+                }
+                rd_kafka_conf_destroy(conf);
+                conf = rd_kafka_conf_new();
+                check(rd_kafka_conf_set_ssl_cert(
+                          conf, RD_KAFKA_CERT_PRIVATE_KEY,
+                          RD_KAFKA_CERT_ENC_PEM, key, (size_t)key_length,
+                          error, sizeof(error)) == RD_KAFKA_CONF_OK, error);
+                wipe = key;
+                for (j = 0; j < (size_t)key_length; j++)
+                        wipe[j] = 0;
+                free(key);
+                set(conf, "security.protocol", "ssl");
+                set(conf, "ssl.ca.location", argv[1]);
+                set(conf, "ssl.fips.mode", "required");
+                refused(conf, "outside the selected strict provider context");
+        }
         conf = strict(argv[1]);
         check(rd_kafka_conf_set_ssl_cert(
                   conf, RD_KAFKA_CERT_PRIVATE_KEY, RD_KAFKA_CERT_ENC_PEM,

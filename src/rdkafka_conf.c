@@ -139,6 +139,18 @@ struct rd_kafka_property {
 #define _UNSUPPORTED_SSL .unsupported = "TLS not available at build time"
 #endif
 
+#if WITH_SASL_SCRAM
+#define _UNSUPPORTED_SCRAM .unsupported = NULL
+#else
+#define _UNSUPPORTED_SCRAM .unsupported = "SASL SCRAM not available at build time"
+#endif
+#if WITH_SASL_OAUTHBEARER
+#define _UNSUPPORTED_OAUTHBEARER .unsupported = NULL
+#else
+#define _UNSUPPORTED_OAUTHBEARER \
+        .unsupported = "SASL OAUTHBEARER not available at build time"
+#endif
+
 #if OPENSSL_VERSION_NUMBER >= 0x1000200fL && defined(WITH_SSL) &&              \
     !defined(LIBRESSL_VERSION_NUMBER)
 #define _UNSUPPORTED_OPENSSL_1_0_2 .unsupported = NULL
@@ -386,7 +398,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0x20, "lz4"},
              {0x40, "sasl_gssapi", _UNSUPPORTED_GSSAPI},
              {0x80, "sasl_plain"},
-             {0x100, "sasl_scram", _UNSUPPORTED_SSL},
+             {0x100, "sasl_scram", _UNSUPPORTED_SCRAM},
              {0x200, "plugins"
 #if !WITH_PLUGINS
               ,
@@ -395,7 +407,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 #endif
              },
              {0x400, "zstd", _UNSUPPORTED_ZSTD},
-             {0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL},
+             {0x800, "sasl_oauthbearer", _UNSUPPORTED_OAUTHBEARER},
              {0x1000, "http", _UNSUPPORTED_HTTP},
              {0x2000, "oidc", _UNSUPPORTED_OIDC},
              {0, NULL}}},

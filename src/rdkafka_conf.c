@@ -133,10 +133,10 @@ struct rd_kafka_property {
 #define _RK(field)  offsetof(rd_kafka_conf_t, field)
 #define _RKT(field) offsetof(rd_kafka_topic_conf_t, field)
 
-#if WITH_SSL
+#if WITH_TLS
 #define _UNSUPPORTED_SSL .unsupported = NULL
 #else
-#define _UNSUPPORTED_SSL .unsupported = "OpenSSL not available at build time"
+#define _UNSUPPORTED_SSL .unsupported = "TLS not available at build time"
 #endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x1000200fL && defined(WITH_SSL) &&              \
@@ -837,6 +837,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
               {RD_KAFKA_PROTO_SASL_SSL, "sasl_ssl", _UNSUPPORTED_SSL},
               {0, NULL}}},
 
+    {_RK_GLOBAL, "ssl.fips.mode", _RK_C_S2I, _RK(ssl.fips_mode),
+     "Experimental broker TLS enforcement policy. required refuses unavailable "
+     "FIPS providers and unsupported cryptographic paths. Runtime checks do not "
+     "establish deployment validation; module identity and operating environment "
+     "require separate qualification.",
+     .vdef = 0, .s2i = {{0, "disabled"}, {1, "required"}}},
+
+    {_RK_GLOBAL, "ssl.fips.config", _RK_C_STR, _RK(ssl.fips_config),
+     "OpenSSL configuration file loaded only into a required-mode client's "
+     "isolated library context. Must include the installed module configuration "
+     "and enable applicable module security checks. Unset uses OpenSSL's "
+     "default configuration file. Unsupported by rustls.", _UNSUPPORTED_SSL},
+
     {_RK_GLOBAL, "ssl.cipher.suites", _RK_C_STR, _RK(ssl.cipher_suites),
      "A cipher suite is a named combination of authentication, "
      "encryption, MAC and key exchange algorithm used to negotiate the "
@@ -987,7 +1000,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .vdef = RD_KAFKA_SSL_ENDPOINT_ID_HTTPS,
      .s2i  = {{RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none"},
               {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
-     _UNSUPPORTED_OPENSSL_1_0_2},
+     _UNSUPPORTED_SSL},
     {_RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
      _RK(ssl.cert_verify_cb),
      "Callback to verify the broker certificate chain.", _UNSUPPORTED_SSL},
@@ -4254,6 +4267,56 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (!conf->open_cb)
                 return "Mandatory config property `open_cb` not set";
+
+        if (conf->ssl.fips_config && !conf->ssl.fips_mode)
+                return "ssl.fips.config requires ssl.fips.mode=required";
+
+        if (conf->ssl.fips_mode) {
+#if !WITH_TLS
+                return "ssl.fips.mode=required requires a TLS backend";
+#endif
+                if (conf->security_protocol != RD_KAFKA_PROTO_SSL)
+                        return "ssl.fips.mode=required supports only "
+                               "security.protocol=ssl (broker TLS/mTLS); "
+                               "SASL and plaintext paths are not qualified";
+                if (!conf->ssl.enable_verify ||
+                    conf->ssl.endpoint_identification !=
+                        RD_KAFKA_SSL_ENDPOINT_ID_HTTPS)
+                        return "ssl.fips.mode=required requires certificate "
+                               "and hostname verification";
+                if (conf->ssl.cert_verify_cb)
+                        return "ssl.fips.mode=required does not support "
+                               "certificate verification callbacks";
+                if (conf->ssl.engine_location ||
+                    conf->ssl.engine_callback_data ||
+                    (conf->ssl.engine_id &&
+                     strcmp(conf->ssl.engine_id, "dynamic")))
+                        return "ssl.fips.mode=required does not support engines";
+                if (conf->ssl.providers)
+                        return "ssl.fips.mode=required selects fips and base "
+                               "providers; explicit ssl.providers unsupported";
+                if (conf->ssl.cipher_suites || conf->ssl.curves_list ||
+                    conf->ssl.sigalgs_list)
+                        return "ssl.fips.mode=required uses its fixed TLS "
+                               "algorithm profile; custom cipher, group or "
+                               "signature lists are unsupported";
+                if ((conf->ssl.ca && conf->ssl.ca->requires_default_crypto) ||
+                    (conf->ssl.cert && conf->ssl.cert->requires_default_crypto) ||
+                    (conf->ssl.key && conf->ssl.key->requires_default_crypto))
+                        return "ssl.fips.mode=required rejects certificate "
+                               "buffers previously parsed with ordinary "
+                               "encrypted PEM or PKCS#12 decryption";
+                if (conf->ssl.keystore_location ||
+                    conf->ssl.keystore_password)
+                        return "ssl.fips.mode=required does not support PKCS#12";
+                if (conf->ssl.crl_location)
+                        return "ssl.fips.mode=required does not yet support CRLs";
+                if (!conf->ssl.ca && !conf->ssl.ca_pem &&
+                    (!conf->ssl.ca_location ||
+                     !strcmp(conf->ssl.ca_location, "probe")))
+                        return "ssl.fips.mode=required requires explicit CA "
+                               "certificates (no platform trust-store probing)";
+        }
 
 #if WITH_SSL
         if (conf->ssl.keystore_location && !conf->ssl.keystore_password)

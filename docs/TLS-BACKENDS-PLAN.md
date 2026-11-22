@@ -33,6 +33,6 @@ Branch: `feat/tls-backends-fips`. Preserve the original checkout and public ABI.
 - [ ] Policy-covered operating environment, release artifact/service evidence and qualification.
 - [ ] Native Windows/macOS (pending hosts); distinguish build configuration from execution.
 - [x] Dependency/linkage inventory and qualification checklist, independent review.
-- [ ] Coherent commits pushed to origin; no merge, release, upstream write or PR.
+- [x] Coherent commits pushed to origin; no merge, release, upstream write or PR.
 
 A runtime FIPS check is a policy mechanism, not a deployment validation claim.

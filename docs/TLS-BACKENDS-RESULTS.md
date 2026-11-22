@@ -206,3 +206,14 @@ commands exited zero, including strict teardown, exact watermark checks and
 pause-triggered purge failure accounting. Final implementation reviews reported
 no remaining actionable finding in the exercised Linux paths; the limitations
 above remain open.
+
+## Delivery
+
+The tested branch was pushed to
+[origin/feat/tls-backends-fips](https://github.com/j7nw4r/librdkafka/tree/feat/tls-backends-fips).
+Remote SHA verification matched the local implementation/documentation commit
+`99bde1a334d080a96b16e35aeeddcf284d99c1e8`; the final delivery-checklist commit
+only updates this record. No merge, release, upstream write or PR was performed.
+No native Windows/macOS execution host was configured in this session. The
+isolated test API service was stopped after acceptance; dependency/build evidence
+remains outside git for manual reuse.

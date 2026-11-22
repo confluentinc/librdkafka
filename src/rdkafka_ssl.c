@@ -1437,19 +1437,8 @@ static int rd_kafka_ssl_fips_set_certs(rd_kafka_t *rk, SSL_CTX *ctx,
                 bio = NULL;
         }
 
-        if (conf->ssl.key) {
-                unsigned char *der = NULL;
-                const unsigned char *p;
-                int len = i2d_PrivateKey(conf->ssl.key->pkey, &der);
-                if (len <= 0)
-                        goto done;
-                p = der;
-                key = d2i_AutoPrivateKey_ex(NULL, &p, len, conf->ssl.lib_ctx,
-                                             "fips=yes");
-                OPENSSL_clear_free(der, (size_t)len);
-                if (!key)
-                        goto done;
-        }
+        if (conf->ssl.key)
+                goto done; /* default-context setter import is not supported */
         if (conf->ssl.key_location || conf->ssl.key_pem) {
                 EVP_PKEY_free(key);
                 key = NULL;

@@ -40,7 +40,7 @@
 /* Bounded scan: setter buffers need not be NUL-terminated. Both PKCS#8
  * ENCRYPTED PRIVATE KEY and legacy Proc-Type/DEK-Info PEM must be identified
  * before invoking an ordinary/default-context decryption parser. */
-static int rd_kafka_cert_requires_default_crypto(rd_kafka_cert_enc_t encoding,
+static int rd_kafka_cert_outside_policy_crypto(rd_kafka_cert_enc_t encoding,
                                                   const void *buffer,
                                                   size_t size) {
         static const char marker[] = "ENCRYPTED";
@@ -230,8 +230,9 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
         cert           = rd_calloc(1, sizeof(*cert));
         cert->type     = type;
         cert->encoding = encoding;
-        cert->requires_default_crypto =
-            rd_kafka_cert_requires_default_crypto(encoding, buffer, size);
+        cert->outside_policy_crypto =
+            type == RD_KAFKA_CERT_PRIVATE_KEY ||
+            rd_kafka_cert_outside_policy_crypto(encoding, buffer, size);
 
         rd_refcnt_init(&cert->refcnt, 1);
 
@@ -541,6 +542,8 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
         cert = rd_calloc(1, sizeof(*cert));
         cert->type = type;
         cert->encoding = encoding;
+        cert->outside_policy_crypto =
+            type == RD_KAFKA_CERT_PRIVATE_KEY && !conf->ssl.fips_mode;
         rd_refcnt_init(&cert->refcnt, 1);
         if (encoding == RD_KAFKA_CERT_ENC_PEM) {
                 cert->pem = rd_malloc(size + 1);
@@ -659,13 +662,26 @@ rd_kafka_conf_res_t rd_kafka_conf_set_ssl_cert(rd_kafka_conf_t *conf,
         }
 
         if (conf->ssl.fips_mode &&
-            rd_kafka_cert_requires_default_crypto(cert_enc, buffer, size)) {
+            rd_kafka_cert_outside_policy_crypto(cert_enc, buffer, size)) {
                 rd_snprintf(errstr, errstr_size,
                             "ssl.fips.mode=required rejects encrypted PEM and "
                             "PKCS#12 certificate buffers; use a context-imported "
                             "PEM key file/string instead");
                 return RD_KAFKA_CONF_INVALID;
         }
+
+#if WITH_SSL
+        /* Even plaintext EC key decoding may derive the public key. Until
+         * configuration objects own a policy context, use file/string key
+         * imports performed at strict client initialization instead. */
+        if (conf->ssl.fips_mode && cert_type == RD_KAFKA_CERT_PRIVATE_KEY) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required does not support OpenSSL "
+                            "private-key buffers; use ssl.key.location or "
+                            "ssl.key.pem for isolated-context import");
+                return RD_KAFKA_CONF_INVALID;
+        }
+#endif
 
         cert = rd_kafka_cert_new(conf, cert_type, cert_enc, buffer, size,
                                  errstr, errstr_size);

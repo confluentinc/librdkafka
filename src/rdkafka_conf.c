@@ -4300,12 +4300,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         return "ssl.fips.mode=required uses its fixed TLS "
                                "algorithm profile; custom cipher, group or "
                                "signature lists are unsupported";
-                if ((conf->ssl.ca && conf->ssl.ca->requires_default_crypto) ||
-                    (conf->ssl.cert && conf->ssl.cert->requires_default_crypto) ||
-                    (conf->ssl.key && conf->ssl.key->requires_default_crypto))
-                        return "ssl.fips.mode=required rejects certificate "
-                               "buffers previously parsed with ordinary "
-                               "encrypted PEM or PKCS#12 decryption";
+                if ((conf->ssl.ca && conf->ssl.ca->outside_policy_crypto) ||
+                    (conf->ssl.cert && conf->ssl.cert->outside_policy_crypto) ||
+                    (conf->ssl.key && conf->ssl.key->outside_policy_crypto))
+                        return "ssl.fips.mode=required rejects private-key or "
+                               "encrypted/PKCS#12 buffers previously parsed "
+                               "outside the selected strict provider context";
                 if (conf->ssl.keystore_location ||
                     conf->ssl.keystore_password)
                         return "ssl.fips.mode=required does not support PKCS#12";

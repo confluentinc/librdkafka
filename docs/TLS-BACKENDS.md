@@ -52,8 +52,10 @@ provider. Client creation requires `rustls_crypto_provider_fips()`, then
 secret here), and each connection requires `rustls_connection_fips()`. A
 provider that reports FIPS does not prove a validated module; that is the
 application's deployment evidence. On Windows, `rustls-cng-crypto` 0.1.2 reports
-FIPS from `BCryptGetFipsAlgorithmMode`; see [Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)
-for the open question about this flag.
+FIPS from `BCryptGetFipsAlgorithmMode`, which follows the legacy Windows FIPS
+policy registry value (measured on an Azure Windows Server 2022 VM, 2026-11-23).
+Required mode with that provider therefore needs the legacy policy enabled; see
+[Windows checks](../packaging/rustls/WINDOWS-CHECKS.md).
 
 ## Build dependencies and commands
 

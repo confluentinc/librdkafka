@@ -84,8 +84,10 @@ those unrelated services.
   10.0.20348.1668), not applications
   ([Microsoft](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation)).
   `rustls-cng-crypto` 0.1.2 reports FIPS from `BCryptGetFipsAlgorithmMode`.
-  Whether that flag tracks the legacy FIPS policy, which Microsoft calls
-  unnecessary since the April 2024 updates, is unverified. See
+  That flag follows the legacy FIPS policy registry value, which Microsoft
+  calls unnecessary since the April 2024 updates (measured on an Azure
+  Windows Server 2022 VM, 2026-11-23). Required mode with this provider
+  therefore needs the legacy policy enabled. See
   `packaging/rustls/WINDOWS-CHECKS.md`.
 - Runtime and static dependency inspections are distinct. The application
   binary holds the provider's crypto; an absence of dynamic crypto imports

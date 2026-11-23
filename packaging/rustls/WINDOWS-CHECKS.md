@@ -34,11 +34,16 @@ aws-lc-fips-sys DLL. They are not evidence for the current rustls backend.
   `src/lib.rs`). `fips_provider()` keeps only FIPS-approved suites and groups;
   `default_provider()` includes others, so its `fips()` is false.
   `fips.rs` calls `.unwrap()` on the `BCryptGetFipsAlgorithmMode` result.
-- **Unverified:** whether `BCryptGetFipsAlgorithmMode` reports the legacy FIPS
-  policy setting or the module's state after April 2024. No source read for this
-  branch states it. If it reads only the legacy policy, `ssl.fips.mode=required`
-  refuses a CNG provider on a host without that policy, even though Microsoft
-  calls the policy unnecessary.
+- `BCryptGetFipsAlgorithmMode` follows the legacy policy registry value
+  `HKLM\System\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy\Enabled`,
+  also after the April 2024 updates. With the value 0 it returned 0, and with
+  the value 1 it returned 1, before and after a reboot. A new process saw a
+  change without a reboot. (Measured on an Azure Windows Server 2022 VM,
+  2026-11-23, build 20348.5870.)
+- Result: a provider that reports `fips()` from this flag, such as
+  `rustls-cng-crypto`, passes `ssl.fips.mode=required` only when that legacy
+  policy is enabled. Microsoft calls the policy unnecessary for the module
+  itself, but librdkafka's required mode needs it with this provider.
 
 ### The remaining Windows test
 
@@ -107,7 +112,7 @@ runs in Docker on a Linux host; set `DOCKER_HOST=tcp://<linux-host>:2375`.
 
 7. Repeat with the FIPS provider, once with the legacy FIPS policy disabled and
    once with it enabled (`HKLM\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy`,
-   `Enabled` = 1, then reboot):
+   `Enabled` = 1):
 
    ```bat
    python focused.py --positive-policy policy-cng-fips.cmd ^
@@ -115,10 +120,12 @@ runs in Docker on a Linux host; set `DOCKER_HOST=tcp://<linux-host>:2375`.
    python acceptance.py --fips --client client-cng-fips.cmd
    ```
 
-   Record the `fips=` value that the host prints for each policy state. That
-   answers the open `BCryptGetFipsAlgorithmMode` question for this build. If
-   the provider reports false, the positive runs must fail with "does not
-   report FIPS mode"; record that, and do not count it as a pass.
+   Record the `fips=` value that the host prints for each policy state.
+   Expected from the measured flag behavior: `fips=false` with the policy
+   disabled, so the positive runs must fail with "does not report FIPS mode"
+   (record it; it is not a pass), and `fips=true` with the policy enabled, so
+   they must pass. A new process sees a policy change, so a reboot is not
+   needed for the flag itself.
 
 `acceptance.py` and `focused.py` start the wrappers with `subprocess`. If
 Python does not run `.cmd` files directly on the VM, build one small `.exe`

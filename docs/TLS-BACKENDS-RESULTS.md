@@ -60,9 +60,16 @@ check failed with 7112. After the fix, `rustls.sh --fips` passed again,
 including `key_match` (match and 7600 mismatch), the opaque-key match, the
 empty-provider refusal, and Kafka acceptance with the opaque-key client.
 
-Not run: Linux for the current rustls backend, the repeated Windows
-`rustls-cng-crypto` run ([steps](../packaging/rustls/WINDOWS-CHECKS.md)),
-the OpenSSL positive required-mode checks on macOS (no OpenSSL FIPS provider
+The Windows rerun at `257b1cf9` on Windows Server 2022 build 20348.5870
+passed every check with `rustls-cng-crypto`: with `cng` and the legacy FIPS
+policy off (no-provider, policy refusal, certificate buffers, opaque key match,
+empty-provider refusal, handshake deadline, Kafka acceptance), and with
+`cng-fips` and the policy on (`fips=true`; positive policy, strict key import,
+opaque key match, handshake deadline, Kafka acceptance with `--fips`). Details
+are in [Windows checks](../packaging/rustls/WINDOWS-CHECKS.md).
+
+Not run: Linux for the current rustls backend, the transport whitebox test,
+OpenSSL, no TLS and MSBuild on Windows at this head, the OpenSSL positive required-mode checks on macOS (no OpenSSL FIPS provider
 installed), and the existing `tests/` regression runner.
 
 ## History: 2026-11-22 results before the provider change

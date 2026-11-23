@@ -5,8 +5,51 @@
 The rustls backend now links no rustls-ffi. A Rust application links static
 librdkafka and rustls-ffi 0.15.7 and installs the crypto provider. The planned
 Windows provider is `rustls-cng-crypto` 0.1.2, which uses the Windows CNG
-module. The first Windows run (below) found two librdkafka defects, which are
-now fixed; the steps further down are the test to repeat.
+module. The first Windows run found two librdkafka defects. After the fixes,
+the rerun at `257b1cf9` passed every check with `cng` and `cng-fips`. The
+steps further down repeat the test.
+
+### Rerun at `257b1cf9`, 2026-11-23: all passed
+
+Same setup as the first run: Windows Server 2022 build 20348.5870 on Azure,
+MSVC 14.44, static `rdkafka.lib`, the host built with `--no-default-features`
+and `cng` or `cng-fips`. Kafka was `apache/kafka:4.1.1` on a Linux Docker host
+reached through `DOCKER_HOST=tcp://<private IP>:2375`. The clients and the fault
+proxy ran on Windows, and the C programs ran through `.cmd` wrappers.
+
+Build checks:
+
+- `pkg-config --static --libs rdkafka-static` printed
+  `-LC:/val/b/install/lib C:/val/b/install/lib/rdkafka.lib -lws2_32 -lsecur32 -lcrypt32`.
+- `rdkafka.lib` defines no `rustls_*` and no AWS-LC symbols. Its only rustls
+  definitions are `rd_kafka_rustls_ops` and `rd_kafka_rustls_provider_get`. It
+  has 50 undefined `rustls_*` references.
+- Both host executables import `bcrypt.dll` and `bcryptprimitives.dll`, and no
+  rustls or AWS-LC DLL.
+
+Legacy FIPS policy off (`Enabled` = 0), all passed:
+
+- `focused.py --no-provider --policy --cert-buffers --key-match-opaque` with
+  `cng`.
+- `focused.py --empty-provider` with the `cng-fips` host and
+  `--install-provider`: refused with "has no cipher suites".
+- `timeout_check.py` with `cng`.
+- `acceptance.py --client client-cng.cmd`: wrong hostname, unknown CA and
+  missing, invalid and expired client credentials rejected; three 96-record
+  roundtrips with and without faults, including `acks=0`; the `acks=0` purge
+  reported 0 success and 96 failed with all callbacks accounted for; the
+  expired server rejected.
+
+Legacy FIPS policy on (`Enabled` = 1), all passed, and the host printed
+`fips=true`:
+
+- `focused.py --positive-policy --fips-cert-buffers --key-match-opaque` with
+  `cng-fips`.
+- `timeout_check.py` with `cng-fips`.
+- `acceptance.py --fips --client client-cng-fips.cmd`, with every case above.
+
+Not run on Windows at this head: the transport whitebox test (Unix only), the
+OpenSSL and no-TLS backends, and the MSBuild solution.
 
 ### First run with `rustls-cng-crypto`, 2026-11-23
 

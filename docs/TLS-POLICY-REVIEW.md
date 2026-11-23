@@ -88,7 +88,8 @@ The rustls checks now run through the Rust test host in
 arm64 they passed with the aws-lc-rs provider and with the rustls FIPS
 provider; see the results file. Earlier rustls runtime results (exact AWS-LC
 4.0.0 on Linux, aws-lc-fips-sys 0.14.3 on Windows) were for the removed AWS-LC
-mode. The Windows CNG provider route has not run. Applicable
+mode. On Windows Server 2022 x64 the CNG provider route passed with `cng` and,
+with the legacy FIPS policy on, with `cng-fips` in required mode. Applicable
 operating-environment evidence and deployment qualification remain separate
 requirements.
 

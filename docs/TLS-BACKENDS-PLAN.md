@@ -31,7 +31,7 @@ Branch: `feat/tls-backends-fips`. Preserve the original checkout and public ABI.
 - [x] FIPS requirement refusal, insecure/unsupported options, isolation/no fallback.
 - [x] Positive required-mode runtime tests with OpenSSL and, for rustls, an application-installed FIPS provider (macOS stand-in). The earlier AWS-LC 4.0.0 runs were for the removed AWS-LC mode.
 - [x] Rustls uses the application's process-default provider; librdkafka links no rustls-ffi (2026-11-23).
-- [ ] Windows run with `rustls-cng-crypto` ([steps](../packaging/rustls/WINDOWS-CHECKS.md)).
+- [x] Windows x64 run with `rustls-cng-crypto`, ordinary and FIPS policy ([results](../packaging/rustls/WINDOWS-CHECKS.md)).
 - [ ] Policy-covered operating environment, release artifact/service evidence and qualification.
 - [x] Native Windows x64 build and execution for OpenSSL, no TLS and the removed AWS-LC rustls mode ([Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)).
 - [x] Native macOS arm64 execution for OpenSSL, no TLS and rustls with stand-in providers.

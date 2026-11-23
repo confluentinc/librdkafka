@@ -242,7 +242,7 @@ OpenSSL ordinary                       see results     tested (x64)     tested
 No TLS                                 see results     tested (x64)     tested
 rustls, application aws-lc-rs stand-in not executed    not executed     tested
 rustls, application FIPS stand-in      not executed    not executed     tested
-rustls, application rustls-cng-crypto  n/a             not executed     n/a
+rustls, application rustls-cng-crypto  n/a             tested (x64)     n/a
 OpenSSL required runtime policy        see results     refusal tested   not executed
 Qualified FIPS deployment              none claimed    none claimed     none claimed
 ```
@@ -269,9 +269,10 @@ mutual authentication; do not infer parity for optional-auth plus SASL.
 Windows Visual Studio defaults remain OpenSSL and include the private dispatcher.
 Existing vcpkg/NuGet/release packaging does not publish rustls variants. On
 Windows, the rustls backend is a static `rdkafka.lib` in the application's Rust
-binary; the planned provider is `rustls-cng-crypto`, which uses the Windows CNG
-module. That route has not run yet; see [Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)
-for the exact test. A rustls package still needs deployment rules and native
+binary with `rustls-cng-crypto`, which uses the Windows CNG module. That route
+passed on Windows Server 2022 x64, including required mode with the legacy FIPS
+policy on; see [Windows checks](../packaging/rustls/WINDOWS-CHECKS.md) for the
+steps and results. A rustls package still needs deployment rules and native
 installed-consumer tests before being advertised. Cross-platform source paths or
 configured build files are not passed native tests.
 

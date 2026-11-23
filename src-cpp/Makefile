@@ -41,7 +41,11 @@ LIBS := -L../src -lrdkafka
 MKL_PKGCONFIG_REQUIRES_PRIVATE := rdkafka
 MKL_PKGCONFIG_REQUIRES := rdkafka
 
+ifeq ($(MKL_NO_SHARED_LIB),y)
+CHECK_FILES+= $(LIBNAME).a
+else
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
+endif
 
 
 file-check: lib

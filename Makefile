@@ -27,6 +27,11 @@ include mklove/Makefile.base
 libs:
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d || exit $?; done)
 
+ifeq ($(MKL_NO_SHARED_LIB),y)
+# The rustls backend links no rustls-ffi, so examples cannot link here.
+CHECK_FILES := $(filter-out examples/%,$(CHECK_FILES))
+file-check: LICENSES.txt
+else
 CONFIGURATION.md: src/rdkafka.h examples
 	@printf "$(MKL_YELLOW)Updating $@$(MKL_CLR_RESET)\n"
 	@echo "# Configuration properties" > CONFIGURATION.md.tmp
@@ -38,6 +43,7 @@ CONFIGURATION.md: src/rdkafka.h examples
 		rm -f CONFIGURATION.md.tmp)
 
 file-check: CONFIGURATION.md LICENSES.txt examples
+endif
 check: file-check
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ || exit $?; done)
 

@@ -100,7 +100,11 @@ mklove-check:
 	$(CXX) -MD -MP $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 
+ifeq ($(MKL_NO_SHARED_LIB),y)
+lib: $(LIBNAME).a $(LIBNAME)-static.a lib-gen-pkg-config
+else
 lib: $(LIBFILENAME) $(LIBNAME).a $(LIBNAME)-static.a $(LIBFILENAMELINK) lib-gen-pkg-config
+endif
 
 # Linker-script (if WITH_LDS=y): overridable by application Makefile
 $(LIBNAME_LDS):
@@ -220,8 +224,8 @@ $(LIBNAME0)-static.pc: $(TOPDIR)/Makefile.config $(LIBNAME)-static.a
 	@printf "$(MKL_YELLOW)Generating pkg-config file $@$(MKL_CLR_RESET)\n"
 	@echo "$$_PKG_CONFIG_STATIC_DEF" > $@
 
-ifeq ($(MKL_NO_STATIC_INSTALL),y)
-lib-gen-pkg-config: $(LIBNAME0).pc
+ifeq ($(MKL_NO_SHARED_LIB),y)
+lib-gen-pkg-config: $(LIBNAME0)-static.pc
 else
 lib-gen-pkg-config: $(LIBNAME0).pc $(LIBNAME0)-static.pc
 endif
@@ -273,22 +277,22 @@ lib-install:
 	$(INSTALL) -d $$DESTDIR$(includedir)/$(PKGNAME)
 	$(INSTALL) -d $$DESTDIR$(libdir)
 	$(INSTALL) $(HDRS) $$DESTDIR$(includedir)/$(PKGNAME)
-ifneq ($(MKL_NO_STATIC_INSTALL),y)
 	$(INSTALL) $(LIBNAME).a $$DESTDIR$(libdir)
 	[ ! -f $(LIBNAME)-static.a ] || $(INSTALL) $(LIBNAME)-static.a $$DESTDIR$(libdir)
-endif
+ifneq ($(MKL_NO_SHARED_LIB),y)
 	$(INSTALL) $(LIBFILENAME) $$DESTDIR$(libdir)
 	[ -f "$(LIBNAME0).pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0).pc $$DESTDIR$(pkgconfigdir) \
 	)
-ifneq ($(MKL_NO_STATIC_INSTALL),y)
+endif
 	[ -f "$(LIBNAME0)-static.pc" ] && ( \
 		$(INSTALL) -d $$DESTDIR$(pkgconfigdir) && \
 		$(INSTALL) -m 0644 $(LIBNAME0)-static.pc $$DESTDIR$(pkgconfigdir) \
 	)
-endif
+ifneq ($(MKL_NO_SHARED_LIB),y)
 	(cd $$DESTDIR$(libdir) && ln -sf $(LIBFILENAME) $(LIBFILENAMELINK))
+endif
 
 lib-uninstall:
 	@printf "$(MKL_YELLOW)Uninstall $(LIBNAME) from $$DESTDIR$(prefix)$(MKL_CLR_RESET)\n"

@@ -30,6 +30,7 @@ mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
 
 mkl_option "Feature" TLS_BACKEND "--with-tls-backend=BACKEND" "Broker TLS backend: openssl, rustls, none" "openssl"
+mkl_option "Feature" RUSTLS_INCLUDE_DIR "--with-rustls-include-dir=DIR" "Directory with the rustls-ffi 0.15.7 rustls.h (rustls backend)" ""
 
 mkl_toggle_option "Development" ENABLE_DEVEL "--enable-devel" "Enable development asserts, checks, etc" "n"
 mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
@@ -114,34 +115,27 @@ void foo (void) {
         # Keep this artifact broker-only; do not pull in curl/Kerberos crypto.
         ENABLE_CURL=n
         ENABLE_GSSAPI=n
-        if ! "$PKG_CONFIG" --exact-version=0.15.7 rustls; then
-          mkl_err "rustls backend requires rustls-ffi exactly 0.15.7 via pkg-config"
+        # The application links rustls-ffi and installs the provider; a
+        # second rustls-ffi copy here would have its own process default.
+        if [[ -n $RUSTLS_INCLUDE_DIR ]]; then
+          rustls_cflags="-I$RUSTLS_INCLUDE_DIR"
+        elif "$PKG_CONFIG" --exact-version=0.15.7 rustls 2>/dev/null; then
+          rustls_cflags=$("$PKG_CONFIG" --cflags-only-I rustls)
+        else
+          mkl_err "rustls backend requires --with-rustls-include-dir=DIR (the rustls-ffi 0.15.7 crate ships src/rustls.h)"
           exit 1
         fi
-        mkl_pkg_config_check rustls WITH_RUSTLS fail CC '
+        mkl_compile_check rustls_header "" fail CC "$rustls_cflags" '
 #include <rustls.h>
 #if RUSTLS_VERSION_NUMBER != 0x000f0700
 #error Wrong rustls-ffi header version
 #endif
-void foo(void) { rustls_version(); }
 ' || exit 1
-        if [[ $MKL_DISTRO != osx && $MKL_DISTRO != mingw* ]]; then
-          mkl_compile_check rustls_hide_archives "" fail CC "-Wl,--exclude-libs,librustls.a:libcrypto.a" '
-void foo(void) { }
-' || exit 1
-          mkl_mkvar_append rustls LDFLAGS "-Wl,--exclude-libs,librustls.a:libcrypto.a"
-          mkl_mkvar_append rustls MKL_PKGCONFIG_LIBS_PRIVATE "-Wl,--exclude-libs,librustls.a:libcrypto.a"
-        fi
-        mkl_compile_check rustls_fips WITH_RUSTLS_FIPS disable CC "$("$PKG_CONFIG" --cflags --libs rustls)" '
-#define DEFINE_FIPS
-#include <rustls.h>
-void foo(void) { rustls_default_fips_provider(); }
-'
-        if [[ $WITH_RUSTLS_FIPS == y ]]; then
-          # Internal archives support examples; never package them as an
-          # application link interface with unprefixed crypto symbols.
-          mkl_mkvar_set rustls MKL_NO_STATIC_INSTALL y
-        fi
+        mkl_mkvar_append rustls CPPFLAGS "$rustls_cflags"
+        # A shared library cannot resolve the application's rustls-ffi on
+        # every platform, so build static libraries only.
+        mkl_mkvar_set rustls MKL_NO_SHARED_LIB y
+        mkl_allvar_set "" MKL_APP_DESC_ONELINE "The Apache Kafka C/C++ library (rustls: the application must link rustls-ffi 0.15.7 as a Rust dependency and install a rustls crypto provider)"
         ;;
       *) mkl_err "Unknown TLS backend: $TLS_BACKEND"; exit 1 ;;
     esac

@@ -42,7 +42,10 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
                                              size_t inlen,
                                              void **outbuf,
                                              size_t *outlenp) {
+        unsigned long long max_size =
+            (unsigned long long)rkb->rkb_rk->rk_conf.recv_max_msg_size;
         unsigned long long out_bufsize = ZSTD_getFrameContentSize(inbuf, inlen);
+        rd_bool_t proven_too_large     = rd_false;
 
         switch (out_bufsize) {
         case ZSTD_CONTENTSIZE_UNKNOWN:
@@ -57,13 +60,14 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
                            out_bufsize, "Error in determining frame size");
                 return RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
         default:
+                if (out_bufsize > max_size)
+                        proven_too_large = rd_true;
                 break;
         }
 
         /* Increase output buffer until it can fit the entire result,
          * capped by message.max.bytes */
-        while (out_bufsize <=
-               (unsigned long long)rkb->rkb_rk->rk_conf.recv_max_msg_size) {
+        while (out_bufsize <= max_size) {
                 size_t ret;
                 char *decompressed;
 
@@ -91,6 +95,8 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
 
                 /* Check if the destination size is too small */
                 if (ZSTD_getErrorCode(ret) == ZSTD_error_dstSize_tooSmall) {
+                        if (out_bufsize == max_size)
+                                proven_too_large = rd_true;
 
                         /* Grow quadratically */
                         out_bufsize += RD_MAX(out_bufsize * 2, 4000);
@@ -114,7 +120,8 @@ rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
                    "output would exceed message.max.bytes (%d)",
                    inlen, out_bufsize, rkb->rkb_rk->rk_conf.max_msg_size);
 
-        return RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE;
+        return proven_too_large ? RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE
+                                : RD_KAFKA_RESP_ERR__BAD_COMPRESSION;
 }
 
 

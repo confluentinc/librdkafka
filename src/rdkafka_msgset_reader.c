@@ -1580,8 +1580,12 @@ rd_kafka_msgset_reader_inner_check(rd_kafka_msgset_reader_t *msetr,
                    msetr->msetr_outer.offset);
 
         rd_kafka_q_purge(&msetr->msetr_rkq);
-        msetr->msetr_msgcnt    = 0;
-        msetr->msetr_msg_bytes = 0;
+        msetr->msetr_msgcnt       = 0;
+        msetr->msetr_msg_bytes    = 0;
+        msetr->msetr_next_offset  = 0;
+        msetr->msetr_leader_epoch = -1;
+        msetr->msetr_ctrl_cnt     = 0;
+        msetr->msetr_aborted_cnt  = 0;
 
         rd_kafka_consumer_err(&msetr->msetr_rkq, msetr->msetr_broker_id,
                               RD_KAFKA_RESP_ERR__BAD_MSG,
@@ -1643,7 +1647,13 @@ rd_kafka_msgset_reader(rd_kafka_msgset_reader_t *msetr) {
                 if (unlikely(msetr->msetr_inner) &&
                     (err =
                          rd_kafka_msgset_reader_inner_check(msetr, MagicByte)))
-                        return err;
+                        /* For share consumer: the error op is queued, so
+                         * stop the inner reader without error to let the
+                         * rest of the ShareFetch response proceed. */
+                        return RD_KAFKA_IS_SHARE_CONSUMER(
+                                   msetr->msetr_rkb->rkb_rk)
+                                   ? RD_KAFKA_RESP_ERR_NO_ERROR
+                                   : err;
 
                 /* Use MsgVersion-specific reader */
                 err = reader[(int)MagicByte](msetr);
@@ -2751,76 +2761,290 @@ static int ut_decompress_lz4_empty_block(rd_kafka_t *rk) {
         RD_UT_PASS();
 }
 
+#if WITH_ZSTD
+/**
+ * @brief A ZSTD frame without a declared content size whose output fits
+ *        within receive.message.max.bytes, but whose buffer-growth guesses
+ *        overshoot the limit, must not report MSG_SIZE_TOO_LARGE.
+ */
+static int ut_decompress_zstd_unknown_size(rd_kafka_t *rk) {
+        size_t value_len = 80000;
+        char *value      = rd_malloc(value_len);
+        char *payload    = rd_malloc(43 + value_len);
+        size_t payload_size;
+        ZSTD_CStream *cctx;
+        size_t zcap, zsize, msgset_size;
+        char *z, *msgset;
+        ZSTD_inBuffer zin;
+        ZSTD_outBuffer zout;
+        size_t r;
+        rd_kafka_resp_err_t err;
+        uint32_t state = 0x12345678u;
+        size_t i;
+        int got;
+
+        RD_UT_BEGIN();
+
+        /* ~1,000 incompressible bytes + 79,000 compressible bytes: total
+         * decompressed size is ~80 KB (within UT_DECOMPRESS_MAX_SIZE), while
+         * compressed size is ~1,000 bytes so zstd's 3x buffer growth jumps
+         * from ~54 KB past 100 KB without proving the limit was exceeded. */
+        for (i = 0; i < 1000; i++) {
+                state    = state * 1664525u + 1013904223u;
+                value[i] = (char)(state >> 24);
+        }
+        memset(value + 1000, 'a', value_len - 1000);
+        payload_size = ut_record_v2_write(payload, 0, value, value_len);
+        rd_free(value);
+
+        cctx = ZSTD_createCStream();
+        RD_UT_ASSERT(cctx, "ZSTD_createCStream failed");
+        r = ZSTD_initCStream(cctx, 1);
+        RD_UT_ASSERT(!ZSTD_isError(r), "ZSTD_initCStream failed: %s",
+                     ZSTD_getErrorName(r));
+
+        zcap      = ZSTD_compressBound(payload_size);
+        z         = rd_malloc(zcap);
+        zin.src   = payload;
+        zin.size  = payload_size;
+        zin.pos   = 0;
+        zout.dst  = z;
+        zout.size = zcap;
+        zout.pos  = 0;
+        while (zin.pos < zin.size) {
+                r = ZSTD_compressStream(cctx, &zout, &zin);
+                RD_UT_ASSERT(!ZSTD_isError(r), "ZSTD_compressStream: %s",
+                             ZSTD_getErrorName(r));
+        }
+        r = ZSTD_endStream(cctx, &zout);
+        RD_UT_ASSERT(!ZSTD_isError(r) && r == 0, "ZSTD_endStream: %s",
+                     ZSTD_getErrorName(r));
+        zsize = zout.pos;
+        ZSTD_freeCStream(cctx);
+        rd_free(payload);
+
+        RD_UT_ASSERT(ZSTD_getFrameContentSize(z, zsize) ==
+                         ZSTD_CONTENTSIZE_UNKNOWN,
+                     "expected ZSTD frame with unknown content size");
+        RD_UT_ASSERT(zsize >= 700 && zsize <= 1200,
+                     "expected ~1,000 compressed bytes, got %" PRIusz, zsize);
+
+        msgset = ut_msgset_new(2, RD_KAFKA_COMPRESSION_ZSTD, 1, z, zsize,
+                               &msgset_size);
+        got    = ut_msgset_parse(rk, msgset, msgset_size, &err);
+        RD_UT_ASSERT(got == 0 && err == RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
+                     "unknown-size zstd within limit: expected "
+                     "_BAD_COMPRESSION, got %d messages and error %s",
+                     got, rd_kafka_err2name(err));
+
+        rd_free(z);
+
+        RD_UT_PASS();
+}
+#endif
+
 /**
  * @brief A compressed Message or RecordBatch inside a compressed MessageSet
- *        refuses the whole outer Message, at any fetch position: the
- *        inner Message read before it is not delivered, the error is at the
- *        outer Message's offset, and the fetch position does not move.
+ *        refuses the whole outer Message, at any fetch position: an
+ *        uncompressed Message or RecordBatch read before it is not delivered,
+ *        the error is at the outer Message's offset, and the fetch position
+ *        does not move.
  */
 static int ut_decompress_nested(rd_kafka_t *rk) {
         static const int64_t fetch_offsets[] = {0, 100};
+        int LeadingVersion;
         int NestedVersion;
         int i;
 
         RD_UT_BEGIN();
 
-        for (NestedVersion = 1; NestedVersion <= 2; NestedVersion++) {
-                for (i = 0; i < (int)RD_ARRAYSIZE(fetch_offsets); i++) {
-                        size_t size, zsize, nested_size, inner_size,
-                            zinner_size, msgset_size;
-                        char *payload, *z, *nested, *inner, *zinner, *msgset;
-                        int64_t fetch_offset = fetch_offsets[i];
-                        int64_t err_offset   = -1;
-                        rd_kafka_resp_err_t err;
-                        int got;
+        for (LeadingVersion = 1; LeadingVersion <= 2; LeadingVersion++) {
+                for (NestedVersion = 1; NestedVersion <= 2; NestedVersion++) {
+                        for (i = 0; i < (int)RD_ARRAYSIZE(fetch_offsets); i++) {
+                                size_t size, zsize, nested_size, lead_size,
+                                    inner_size, zinner_size, msgset_size;
+                                char *payload, *z, *nested, *lead, *inner,
+                                    *zinner, *msgset;
+                                int64_t fetch_offset = fetch_offsets[i];
+                                int64_t err_offset   = -1;
+                                rd_kafka_resp_err_t err;
+                                int got;
 
-                        /* An LZ4 compressed Message (v1) or RecordBatch
-                         * (v2) of 10 messages, at relative offset 1 ... */
-                        payload = ut_payload_new(NestedVersion, 10, 100, &size);
-                        z       = ut_compress(UT_LZ4, payload, size, &zsize);
-                        RD_UT_ASSERT(z, "compression failed");
-                        nested = ut_msgset_new(NestedVersion,
-                                               RD_KAFKA_COMPRESSION_LZ4, 10, z,
-                                               zsize, &nested_size);
-                        ut_write_be(nested, 1, 8); /* Offset, BaseOffset */
+                                /* An LZ4 compressed Message (v1) or RecordBatch
+                                 * (v2) of 10 messages, at relative offset 1 ...
+                                 */
+                                payload = ut_payload_new(NestedVersion, 10, 100,
+                                                         &size);
+                                z = ut_compress(UT_LZ4, payload, size, &zsize);
+                                RD_UT_ASSERT(z, "compression failed");
+                                nested = ut_msgset_new(
+                                    NestedVersion, RD_KAFKA_COMPRESSION_LZ4, 10,
+                                    z, zsize, &nested_size);
+                                ut_write_be(nested, 1,
+                                            8); /* Offset, BaseOffset */
 
-                        /* ... after an uncompressed Message at relative
-                         * offset 0, in the inner MessageSet of an LZ4
-                         * compressed Message at offset 101. */
-                        inner      = rd_malloc(35 + nested_size);
-                        inner_size = ut_msg_v1_write(inner, 0, 0, "a", 1);
-                        memcpy(inner + inner_size, nested, nested_size);
-                        inner_size += nested_size;
-                        zinner = ut_compress(UT_LZ4, inner, inner_size,
-                                             &zinner_size);
-                        RD_UT_ASSERT(zinner, "compression failed");
-                        msgset      = rd_malloc(34 + zinner_size);
-                        msgset_size = ut_msg_v1_write(msgset, 101,
-                                                      RD_KAFKA_COMPRESSION_LZ4,
-                                                      zinner, zinner_size);
+                                /* ... after an uncompressed Message (v1,
+                                 * relative offset 0) or RecordBatch (v2,
+                                 * BaseOffset 200), in the inner MessageSet of
+                                 * an LZ4 compressed Message at offset 101. */
+                                if (LeadingVersion == 1) {
+                                        lead = rd_malloc(35);
+                                        lead_size =
+                                            ut_msg_v1_write(lead, 0, 0, "a", 1);
+                                } else {
+                                        size_t rec_size;
+                                        char *rec =
+                                            ut_payload_new(2, 1, 1, &rec_size);
+                                        lead = ut_msgset_new(
+                                            2, 0, 1, rec, rec_size, &lead_size);
+                                        ut_write_be(lead, 200,
+                                                    8); /* BaseOffset */
+                                        rd_free(rec);
+                                }
 
-                        got =
-                            ut_msgset_parse0(rk, msgset, msgset_size,
-                                             &fetch_offset, &err, &err_offset);
-                        RD_UT_ASSERT(
-                            got == 0 && err == RD_KAFKA_RESP_ERR__BAD_MSG &&
-                                err_offset == 101 &&
-                                fetch_offset == fetch_offsets[i],
-                            "v%d nested at fetch offset %" PRId64
-                            ": expected _BAD_MSG at offset 101, no messages "
-                            "and the same fetch offset, got %d messages, "
-                            "error %s at offset %" PRId64
-                            " and fetch offset %" PRId64,
-                            NestedVersion, fetch_offsets[i], got,
-                            rd_kafka_err2name(err), err_offset, fetch_offset);
+                                inner = rd_malloc(lead_size + nested_size);
+                                memcpy(inner, lead, lead_size);
+                                memcpy(inner + lead_size, nested, nested_size);
+                                inner_size = lead_size + nested_size;
+                                zinner = ut_compress(UT_LZ4, inner, inner_size,
+                                                     &zinner_size);
+                                RD_UT_ASSERT(zinner, "compression failed");
+                                msgset      = rd_malloc(34 + zinner_size);
+                                msgset_size = ut_msg_v1_write(
+                                    msgset, 101, RD_KAFKA_COMPRESSION_LZ4,
+                                    zinner, zinner_size);
 
-                        rd_free(zinner);
-                        rd_free(inner);
-                        rd_free(nested);
-                        rd_free(z);
-                        rd_free(payload);
+                                got = ut_msgset_parse0(rk, msgset, msgset_size,
+                                                       &fetch_offset, &err,
+                                                       &err_offset);
+                                RD_UT_ASSERT(
+                                    got == 0 &&
+                                        err == RD_KAFKA_RESP_ERR__BAD_MSG &&
+                                        err_offset == 101 &&
+                                        fetch_offset == fetch_offsets[i],
+                                    "lead v%d + nested v%d at fetch offset "
+                                    "%" PRId64
+                                    ": expected _BAD_MSG at offset 101, no "
+                                    "messages and the same fetch offset, got "
+                                    "%d messages, error %s at offset %" PRId64
+                                    " and fetch offset %" PRId64,
+                                    LeadingVersion, NestedVersion,
+                                    fetch_offsets[i], got,
+                                    rd_kafka_err2name(err), err_offset,
+                                    fetch_offset);
+
+                                rd_free(zinner);
+                                rd_free(inner);
+                                rd_free(lead);
+                                rd_free(nested);
+                                rd_free(z);
+                                rd_free(payload);
+                        }
                 }
         }
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief For a share consumer, a nested compressed MessageSet in a legacy
+ *        wrapper queues the error and stops the inner reader, while returning
+ *        no error so the remaining MessageSets and ShareFetch response still
+ *        proceed.
+ */
+static int ut_decompress_nested_share(void) {
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        char errstr[256];
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_t *rkt;
+        rd_kafka_toppar_t *rktp;
+        struct rd_kafka_toppar_ver tver = {.version = 0};
+        rd_kafka_q_t *response_q;
+        rd_kafka_buf_t *rkbuf;
+        rd_kafka_resp_err_t parse_err;
+        rd_kafka_op_t *rko;
+        size_t size, zsize, nested_size, inner_size, zinner_size, first_size,
+            second_size, msgset_size;
+        char *payload, *z, *nested, *inner, *zinner, *msgset;
+
+        RD_UT_BEGIN();
+
+        if (rd_kafka_conf_set(conf, "group.id", "ut-decompress-share", errstr,
+                              sizeof(errstr))) {
+                rd_kafka_conf_destroy(conf);
+                RD_UT_FAIL("%s", errstr);
+        }
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rkshare, "%s", errstr);
+
+        rkt  = rd_kafka_topic_new(rkshare->rkshare_rk, "ut_decompress_share",
+                                  NULL);
+        rktp = rd_kafka_toppar_new(rkt, 0);
+        tver.rktp  = rktp;
+        response_q = rd_kafka_q_new(rkshare->rkshare_rk);
+
+        /* An outer compressed v1 Message (offset 101) containing an
+         * uncompressed inner Message followed by a nested compressed one,
+         * followed by a valid uncompressed Message at offset 102. */
+        payload = ut_payload_new(1, 2, 16, &size);
+        z       = ut_compress(UT_LZ4, payload, size, &zsize);
+        RD_UT_ASSERT(z, "compression failed");
+        nested = ut_msgset_new(1, RD_KAFKA_COMPRESSION_LZ4, 2, z, zsize,
+                               &nested_size);
+        ut_write_be(nested, 1, 8);
+
+        inner      = rd_malloc(35 + nested_size);
+        inner_size = ut_msg_v1_write(inner, 0, 0, "a", 1);
+        memcpy(inner + inner_size, nested, nested_size);
+        inner_size += nested_size;
+        zinner = ut_compress(UT_LZ4, inner, inner_size, &zinner_size);
+        RD_UT_ASSERT(zinner, "compression failed");
+
+        first_size  = 34 + zinner_size;
+        second_size = 34 + 2;
+        msgset_size = first_size + second_size;
+        msgset      = rd_malloc(msgset_size);
+        ut_msg_v1_write(msgset, 101, RD_KAFKA_COMPRESSION_LZ4, zinner,
+                        zinner_size);
+        ut_msg_v1_write(msgset + first_size, 102, 0, "ok", 2);
+
+        rkbuf = rd_kafka_buf_new_shadow(msgset, msgset_size, rd_free);
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkshare->rkshare_rk);
+
+        parse_err =
+            rd_kafka_share_msgset_parse(rkbuf, rktp, NULL, &tver, response_q);
+        RD_UT_ASSERT(parse_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                     "expected NO_ERROR from share msgset parse, got %s",
+                     rd_kafka_err2name(parse_err));
+
+        rko = rd_kafka_q_pop(response_q, RD_POLL_NOWAIT, 0);
+        RD_UT_ASSERT(rko && rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR &&
+                         rko->rko_err == RD_KAFKA_RESP_ERR__BAD_MSG &&
+                         rko->rko_u.err.offset == 101,
+                     "expected _BAD_MSG error op at offset 101");
+        rd_kafka_op_destroy(rko);
+
+        rko = rd_kafka_q_pop(response_q, RD_POLL_NOWAIT, 0);
+        RD_UT_ASSERT(rko && rko->rko_type == RD_KAFKA_OP_FETCH &&
+                         rko->rko_u.fetch.rkm.rkm_offset == 102,
+                     "expected following message at offset 102");
+        rd_kafka_op_destroy(rko);
+
+        rko = rd_kafka_q_pop(response_q, RD_POLL_NOWAIT, 0);
+        RD_UT_ASSERT(!rko, "unexpected extra op on share response queue");
+
+        rd_free(zinner);
+        rd_free(inner);
+        rd_free(nested);
+        rd_free(z);
+        rd_free(payload);
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_q_destroy_owner(response_q);
+        rd_kafka_toppar_destroy(rktp);
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
 
         RD_UT_PASS();
 }
@@ -2865,8 +3089,10 @@ int unittest_msgset_decompress(void) {
 #if WITH_ZSTD
         fails += ut_decompress_max_size(rk, UT_ZSTD);
         fails += ut_decompress_empty(rk, UT_ZSTD);
+        fails += ut_decompress_zstd_unknown_size(rk);
 #endif
         fails += ut_decompress_nested(rk);
+        fails += ut_decompress_nested_share();
 
         rd_kafka_destroy(rk);
 

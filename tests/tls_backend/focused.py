@@ -14,6 +14,10 @@ p.add_argument("--policy", type=Path, action="append", default=[])
 p.add_argument("--cert-buffers", type=Path, action="append", default=[])
 p.add_argument("--transport", type=Path, help="Deterministic real-rustls socketpair test")
 p.add_argument("--positive-policy", type=Path, help="Requires a working configured FIPS module")
+p.add_argument("--no-provider", type=Path, action="append", default=[],
+               help="rustls process-default build with no installed provider")
+p.add_argument("--fips-cert-buffers", type=Path, action="append", default=[],
+               help="Requires a FIPS rustls provider")
 a = p.parse_args()
 with tempfile.TemporaryDirectory(prefix="rdkafka-tls-unit-") as temp:
     root = Path(temp)
@@ -31,6 +35,12 @@ with tempfile.TemporaryDirectory(prefix="rdkafka-tls-unit-") as temp:
     for binary in a.cert_buffers:
         subprocess.run([str(binary.resolve())] + [str(root / n) for n in
                        ("ca.crt", "client.crt", "client.key", "ca.der", "client.der", "key.der")],
+                       check=True, timeout=30)
+    for binary in a.no_provider:
+        subprocess.run([str(binary.resolve()), str(root / "ca.crt"), str(root / "client.key")],
+                       check=True, timeout=30)
+    for binary in a.fips_cert_buffers:
+        subprocess.run([str(binary.resolve())] + [str(root / n) for n in ("ca.crt", "client.crt", "client.key")],
                        check=True, timeout=30)
     modules = root / "empty-modules"
     modules.mkdir()

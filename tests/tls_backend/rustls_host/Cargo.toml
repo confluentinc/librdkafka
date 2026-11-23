@@ -1,0 +1,29 @@
+# Test host for librdkafka built with RDKAFKA_TLS_BACKEND=rustls. It supplies
+# rustls-ffi and installs a stand-in crypto provider; the provider choice is
+# test scaffolding, not part of librdkafka.
+[package]
+name = "rdkafka-rustls-host"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[features]
+default = ["aws-lc-rs"]
+aws-lc-rs = ["rustls/aws-lc-rs"]
+fips = ["rustls/fips"]
+cng = ["dep:rustls-cng-crypto"]
+cng-fips = ["cng"]
+
+[dependencies]
+# Static librdkafka resolves its rustls_* references from this crate.
+# no_log_capture leaves the global log facade to the application.
+rustls-ffi = { version = "=0.15.7", default-features = false, features = ["no_log_capture"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["std", "tls12"] }
+
+[target.'cfg(windows)'.dependencies]
+rustls-cng-crypto = { version = "=0.1.2", optional = true }
+
+[build-dependencies]
+cc = "1"

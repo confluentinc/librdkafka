@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
         CHECK(strstr(err, "mutually exclusive"));
         rk.rk_conf.ssl.ca_pem = NULL;
         CHECK(rd_kafka_rustls_ctx_init(&rk, err, sizeof(err)) == 0);
-        provider = rustls_aws_lc_rs_crypto_provider();
+        provider = rustls_crypto_provider_default();
         cert_pem = rd_file_read(argv[2], &cert_len, 1024 * 1024);
         key_pem = rd_file_read(argv[3], &key_len, 1024 * 1024);
         CHECK(cert_pem && key_pem);

@@ -4814,6 +4814,7 @@ static void rd_kafka_broker_consumer_serve(rd_kafka_broker_t *rkb,
                rkb->rkb_state == initial_state &&
                abs_timeout > (now = rd_clock())) {
                 rd_ts_t min_backoff;
+                rd_ts_t throttle_until;
 
                 rd_kafka_broker_unlock(rkb);
 
@@ -4836,8 +4837,19 @@ static void rd_kafka_broker_consumer_serve(rd_kafka_broker_t *rkb,
                 if (!rkb->rkb_fetching &&
                     rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
                         if (min_backoff < now) {
-                                rd_kafka_broker_fetch_toppars(rkb, now);
-                                min_backoff = abs_timeout;
+                                /* KIP-219: while the broker has throttled this
+                                 * connection no FetchRequest is created, wake
+                                 * up when the throttle ends. min_backoff must
+                                 * not stay in the past, or the broker thread
+                                 * would not block until then. */
+                                throttle_until =
+                                    rd_kafka_broker_throttle_until(rkb);
+                                if (unlikely(throttle_until > now)) {
+                                        min_backoff = throttle_until;
+                                } else {
+                                        rd_kafka_broker_fetch_toppars(rkb, now);
+                                        min_backoff = abs_timeout;
+                                }
                         } else if (min_backoff < RD_TS_MAX)
                                 rd_rkb_dbg(rkb, FETCH, "FETCH",
                                            "Fetch backoff for %" PRId64 "ms",

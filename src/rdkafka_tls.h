@@ -69,4 +69,11 @@ void rd_kafka_tls_term(void);
 void rd_kafka_tls_thread_term(void);
 int rd_kafka_tls_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size);
 void rd_kafka_tls_ctx_term(rd_kafka_t *rk);
+#if WITH_RUSTLS
+struct rustls_crypto_provider;
+const struct rustls_crypto_provider *
+rd_kafka_rustls_provider_get(rd_bool_t fips_required,
+                             char *errstr,
+                             size_t errstr_size);
+#endif
 #endif

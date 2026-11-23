@@ -38,7 +38,6 @@
 #define WITH_SOCKEM 1
 #cmakedefine01 WITH_TLS
 #cmakedefine01 WITH_RUSTLS
-#cmakedefine01 WITH_RUSTLS_FIPS
 #cmakedefine01 WITH_SSL
 #cmakedefine01 WITH_SASL
 #cmakedefine01 WITH_SASL_SCRAM

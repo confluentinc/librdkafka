@@ -498,12 +498,9 @@ fail:
 #endif /* WITH_SSL */
 
 #if WITH_RUSTLS
-#define DEFINE_AWS_LC_RS
-#if WITH_RUSTLS_FIPS
-#define DEFINE_FIPS
-#endif
 #include <rustls.h>
 #include "rdbase64.h"
+#include "rdkafka_tls.h"
 
 static void rd_kafka_cert_destroy(rd_kafka_cert_t *cert) {
         if (rd_refcnt_sub(&cert->refcnt) > 0)
@@ -570,25 +567,13 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
         }
         if (type == RD_KAFKA_CERT_PRIVATE_KEY) {
                 struct rustls_signing_key *key = NULL;
-                const struct rustls_crypto_provider *provider;
-#if WITH_RUSTLS_FIPS
-                provider = conf->ssl.fips_mode ?
-                    rustls_default_fips_provider() :
-                    rustls_aws_lc_rs_crypto_provider();
-#else
-                if (conf->ssl.fips_mode) {
+                char reason[256];
+                const struct rustls_crypto_provider *provider =
+                    rd_kafka_rustls_provider_get(conf->ssl.fips_mode, reason,
+                                                 sizeof(reason));
+                if (!provider) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ssl.fips.mode=required: rustls-ffi FIPS provider unavailable for key import");
-                        rd_kafka_cert_destroy(cert);
-                        return NULL;
-                }
-                provider = rustls_aws_lc_rs_crypto_provider();
-#endif
-                if (!provider || (conf->ssl.fips_mode &&
-                                  !rustls_crypto_provider_fips(provider))) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "rustls required crypto provider unavailable for key import");
-                        rustls_crypto_provider_free(provider);
+                                    "rustls private key import: %s", reason);
                         rd_kafka_cert_destroy(cert);
                         return NULL;
                 }

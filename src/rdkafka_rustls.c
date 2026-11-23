@@ -32,10 +32,6 @@
 #include "rdkafka_tls.h"
 #include "rdkafka_cert.h"
 
-#define DEFINE_AWS_LC_RS
-#if WITH_RUSTLS_FIPS
-#define DEFINE_FIPS
-#endif
 #include <rustls.h>
 
 #if RUSTLS_VERSION_NUMBER != 0x000f0700
@@ -127,6 +123,54 @@ static void rd_kafka_rustls_pem_free(char *pem, size_t len) {
         rd_free(pem);
 }
 
+/* The header is pinned to 0.15.7, but the application selects the linked
+ * rustls-ffi. Refuse another version instead of risking ABI drift. */
+static rd_bool_t rd_kafka_rustls_linked_version_ok(void) {
+        static const char want[] = "rustls-ffi/0.15.7/";
+        rustls_str v             = rustls_version();
+        return v.len >= sizeof(want) - 1 &&
+               !memcmp(v.data, want, sizeof(want) - 1);
+}
+
+/**
+ * @brief Return the application's process-default crypto provider for TLS
+ *        configuration and key import.
+ *
+ * librdkafka links no rustls-ffi and never falls back to another provider.
+ * Free with rustls_crypto_provider_free().
+ * @returns NULL with \p errstr set on failure.
+ */
+const struct rustls_crypto_provider *
+rd_kafka_rustls_provider_get(rd_bool_t fips_required,
+                             char *errstr,
+                             size_t errstr_size) {
+        const struct rustls_crypto_provider *provider;
+        if (!rd_kafka_rustls_linked_version_ok()) {
+                rd_snprintf(errstr, errstr_size,
+                            "the application linked a rustls-ffi other "
+                            "than 0.15.7");
+                return NULL;
+        }
+        provider = rustls_crypto_provider_default();
+        if (!provider) {
+                rd_snprintf(errstr, errstr_size,
+                            "no process-default rustls crypto provider is "
+                            "installed: the application must call rustls "
+                            "CryptoProvider::install_default() first; "
+                            "no fallback is permitted");
+                return NULL;
+        }
+        if (fips_required && !rustls_crypto_provider_fips(provider)) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required: the process-default "
+                            "rustls crypto provider does not report FIPS "
+                            "mode; no fallback is permitted");
+                rustls_crypto_provider_free(provider);
+                return NULL;
+        }
+        return provider;
+}
+
 static int rd_kafka_rustls_ctx_init(rd_kafka_t *rk,
                                     char *errstr,
                                     size_t errstr_size) {
@@ -150,31 +194,10 @@ static int rd_kafka_rustls_ctx_init(rd_kafka_t *rk,
 
         if (rd_kafka_rustls_unsupported(rk, errstr, errstr_size) == -1)
                 return -1;
-        if (rk->rk_conf.ssl.fips_mode) {
-#if WITH_RUSTLS_FIPS
-                provider = rustls_default_fips_provider();
-                if (!provider || !rustls_crypto_provider_fips(provider)) {
-                        rd_snprintf(errstr, errstr_size,
-                                    "rustls FIPS provider is unavailable or "
-                                    "not operating in FIPS mode");
-                        goto done;
-                }
-#else
-                rd_snprintf(errstr, errstr_size,
-                            "ssl.fips.mode=required needs rustls-ffi built "
-                            "with the fips feature; no fallback is permitted");
+        provider = rd_kafka_rustls_provider_get(rk->rk_conf.ssl.fips_mode,
+                                                errstr, errstr_size);
+        if (!provider)
                 goto done;
-#endif
-        } else {
-                /* An explicit provider avoids a host application's unrelated
-                 * process-default rustls provider changing this client. */
-                provider = rustls_aws_lc_rs_crypto_provider();
-        }
-        if (!provider) {
-                rd_snprintf(errstr, errstr_size,
-                            "rustls AWS-LC provider initialization failed");
-                goto done;
-        }
 
 #define CHECK_RESULT(expr, what) do { \
         operation = (what); \
@@ -297,9 +320,11 @@ static int rd_kafka_rustls_ctx_init(rd_kafka_t *rk,
         config = NULL;
         ret = 0;
         rd_kafka_dbg(rk, SECURITY, "TLSBACKEND",
-                     "Broker TLS backend rustls-ffi 0.15.7; "
-                     "runtime FIPS enforcement %s (deployment qualification "
+                     "Broker TLS backend rustls-ffi 0.15.7, application "
+                     "process-default provider (reports FIPS %s); runtime "
+                     "FIPS enforcement %s (deployment qualification "
                      "requires separate module and environment evidence)",
+                     rustls_crypto_provider_fips(provider) ? "true" : "false",
                      rk->rk_conf.ssl.fips_mode ? "required" : "disabled");
         goto done;
 

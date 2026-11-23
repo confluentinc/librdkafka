@@ -850,9 +850,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
 
     {_RK_GLOBAL, "ssl.fips.mode", _RK_C_S2I, _RK(ssl.fips_mode),
      "Experimental broker TLS enforcement policy. required refuses unavailable "
-     "FIPS providers and unsupported cryptographic paths. Runtime checks do not "
-     "establish deployment validation; module identity and operating environment "
-     "require separate qualification.",
+     "FIPS providers and unsupported cryptographic paths. With the rustls "
+     "backend, the application's process-default rustls crypto provider must "
+     "report FIPS mode. Runtime checks do not establish deployment validation; "
+     "module identity and operating environment require separate "
+     "qualification.",
      .vdef = 0, .s2i = {{0, "disabled"}, {1, "required"}}},
 
     {_RK_GLOBAL, "ssl.fips.config", _RK_C_STR, _RK(ssl.fips_config),

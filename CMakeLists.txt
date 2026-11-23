@@ -114,7 +114,6 @@ else()
 endif()
 option(WITH_SSL "With OpenSSL TLS and authentication crypto" ${with_ssl_default})
 set(WITH_RUSTLS OFF)
-set(WITH_RUSTLS_FIPS OFF)
 if(RDKAFKA_TLS_BACKEND STREQUAL "rustls")
   set(WITH_SSL OFF)
   set(WITH_RUSTLS ON)
@@ -122,29 +121,30 @@ if(RDKAFKA_TLS_BACKEND STREQUAL "rustls")
   set(WITH_CURL OFF)
   list(REMOVE_ITEM BUILT_WITH "CURL")
   set(WITH_SASL OFF)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(RUSTLS REQUIRED IMPORTED_TARGET rustls=0.15.7)
-  # A system AWS-LC FIPS archive has OpenSSL-compatible unprefixed symbols.
-  # Hide archive internals in ELF shared libraries and installed consumers so
-  # another crypto stack in the application cannot interpose this module.
-  set(RUSTLS_ARCHIVE_HIDE_FLAG "")
-  if(UNIX AND NOT APPLE)
-    include(CheckCCompilerFlag)
-    check_c_compiler_flag("-Wl,--exclude-libs,librustls.a:libcrypto.a" RUSTLS_CAN_HIDE_ARCHIVES)
-    if(NOT RUSTLS_CAN_HIDE_ARCHIVES)
-      message(FATAL_ERROR "rustls requires linker support for hiding static crypto archive symbols on this platform")
-    endif()
-    set(RUSTLS_ARCHIVE_HIDE_FLAG "-Wl,--exclude-libs,librustls.a:libcrypto.a")
+  # The application links rustls-ffi and installs the crypto provider.
+  # librdkafka needs only the header: a second rustls-ffi copy here would
+  # have its own process-default provider.
+  find_package(PkgConfig QUIET)
+  if(PKG_CONFIG_FOUND)
+    pkg_check_modules(RUSTLS_HEADER QUIET rustls=0.15.7)
+  endif()
+  find_path(RUSTLS_INCLUDE_DIR rustls.h HINTS ${RUSTLS_HEADER_INCLUDE_DIRS})
+  if(NOT RUSTLS_INCLUDE_DIR)
+    message(FATAL_ERROR "RDKAFKA_TLS_BACKEND=rustls needs the rustls-ffi 0.15.7 rustls.h: set RUSTLS_INCLUDE_DIR (the rustls-ffi crate ships it as src/rustls.h and exports DEP_RUSTLS_FFI_INCLUDE)")
   endif()
   include(CheckCSourceCompiles)
-  set(CMAKE_REQUIRED_INCLUDES ${RUSTLS_INCLUDE_DIRS})
-  set(CMAKE_REQUIRED_LIBRARIES PkgConfig::RUSTLS)
-  check_c_source_compiles("#define DEFINE_FIPS
-#include <rustls.h>
-int main(void) { return rustls_default_fips_provider() == 0; }" WITH_RUSTLS_FIPS_AVAILABLE)
-  set(WITH_RUSTLS_FIPS ${WITH_RUSTLS_FIPS_AVAILABLE})
+  set(CMAKE_REQUIRED_INCLUDES ${RUSTLS_INCLUDE_DIR})
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+  check_c_source_compiles("#include <rustls.h>
+#if RUSTLS_VERSION_NUMBER != 0x000f0700
+#error wrong rustls-ffi header
+#endif
+int rdkafka_rustls_header_check;" RUSTLS_HEADER_0_15_7)
+  unset(CMAKE_TRY_COMPILE_TARGET_TYPE)
   unset(CMAKE_REQUIRED_INCLUDES)
-  unset(CMAKE_REQUIRED_LIBRARIES)
+  if(NOT RUSTLS_HEADER_0_15_7)
+    message(FATAL_ERROR "${RUSTLS_INCLUDE_DIR}/rustls.h is not the rustls-ffi 0.15.7 header")
+  endif()
   list(APPEND BUILT_WITH "RUSTLS")
 elseif(RDKAFKA_TLS_BACKEND STREQUAL "none")
   set(WITH_SSL OFF)
@@ -225,11 +225,20 @@ endif()
 # }
 
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
-if(WITH_RUSTLS_FIPS AND RDKAFKA_BUILD_STATIC)
-  message(FATAL_ERROR "rustls FIPS static librdkafka consumers are unsupported: unprefixed module symbols can resolve application OpenSSL calls. Use shared librdkafka with hidden archive internals.")
-endif()
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
 option(RDKAFKA_BUILD_TESTS "Build tests" ON)
+if(WITH_RUSTLS)
+  # A shared library cannot use the application's rustls-ffi on Windows, and
+  # elsewhere only through unresolved symbols. Link librdkafka statically.
+  if(NOT RDKAFKA_BUILD_STATIC)
+    message(FATAL_ERROR "RDKAFKA_TLS_BACKEND=rustls requires RDKAFKA_BUILD_STATIC=ON: link librdkafka into the application that supplies rustls-ffi 0.15.7")
+  endif()
+  if(RDKAFKA_BUILD_EXAMPLES OR RDKAFKA_BUILD_TESTS)
+    message(STATUS "rustls: examples and tests are not built because they have no rustls-ffi")
+  endif()
+  set(RDKAFKA_BUILD_EXAMPLES OFF)
+  set(RDKAFKA_BUILD_TESTS OFF)
+endif()
 if(WIN32)
     option(WITHOUT_WIN32_CONFIG "Avoid including win32_config.h on cmake builds" ON)
 endif(WIN32)

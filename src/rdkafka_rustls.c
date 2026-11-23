@@ -160,6 +160,14 @@ rd_kafka_rustls_provider_get(rd_bool_t fips_required,
                             "no fallback is permitted");
                 return NULL;
         }
+        if (!rustls_crypto_provider_ciphersuites_len(provider)) {
+                rd_snprintf(errstr, errstr_size,
+                            "the process-default rustls crypto provider has "
+                            "no cipher suites (a FIPS-only provider can be "
+                            "empty when the platform FIPS mode is off)");
+                rustls_crypto_provider_free(provider);
+                return NULL;
+        }
         if (fips_required && !rustls_crypto_provider_fips(provider)) {
                 rd_snprintf(errstr, errstr_size,
                             "ssl.fips.mode=required: the process-default "
@@ -299,8 +307,14 @@ static int rd_kafka_rustls_ctx_init(rd_kafka_t *rk,
                 operation = "client certificate import";
                 if (result != RUSTLS_RESULT_OK)
                         goto rustls_error;
-                CHECK_RESULT(rustls_certified_key_keys_match(certified_key),
-                             "client certificate/private key match");
+                /* Like rustls itself, accept an unknown result: a provider
+                 * key (for example a Windows CNG key) need not expose its
+                 * public key. A detected mismatch still fails. */
+                result    = rustls_certified_key_keys_match(certified_key);
+                operation = "client certificate/private key match";
+                if (result != RUSTLS_RESULT_OK &&
+                    result != RUSTLS_RESULT_INCONSISTENT_KEYS_UNKNOWN)
+                        goto rustls_error;
                 CHECK_RESULT(rustls_client_config_builder_set_certified_key(
                                  builder, &certified_key, 1),
                              "client certificate selection");

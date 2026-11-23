@@ -16,6 +16,7 @@ fn compile(name: &str, path: &Path, includes: &[PathBuf]) {
         .file(path)
         .includes(includes)
         .define("main", format!("rdk_{name}_main").as_str())
+        .define("LIBRDKAFKA_STATICLIB", None)
         .warnings(false)
         .compile(&format!("rdk_{name}"));
 }

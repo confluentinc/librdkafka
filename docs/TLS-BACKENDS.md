@@ -36,7 +36,14 @@ librdkafka gets the provider from `rustls_crypto_provider_default()` for the
 client configuration and for every private-key import. If no provider is
 installed, client creation and key import fail with "no process-default rustls
 crypto provider is installed". There is no fallback provider. librdkafka also
-refuses a linked rustls-ffi whose `rustls_version()` is not 0.15.7.
+refuses a provider with no cipher suites, and a linked rustls-ffi whose
+`rustls_version()` is not 0.15.7.
+
+A provider key can hide its public key; Windows CNG keys from
+`rustls-cng-crypto` do. rustls then reports the certificate and key match as
+unknown, and librdkafka accepts that, as rustls itself does. A detected
+mismatch still fails client creation. An undetected mismatch fails at the
+broker handshake.
 
 The provider state is global to one rustls copy. A rustls-ffi library linked
 into librdkafka (a static archive, a shared library or a DLL) has its own state

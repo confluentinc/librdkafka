@@ -21,6 +21,9 @@ Passed:
   no rustls dynamic library dependency. The FIPS stand-in host depends on
   `libaws_lc_fips_0_14_4_crypto.dylib`, which aws-lc-fips-sys builds as a
   shared library on macOS; librdkafka itself still has no AWS-LC code.
+- The static `rdkafka-static.pc` and `rdkafka++-static.pc` now name the
+  library with the platform's static prefix and suffix (`librdkafka.a` here,
+  `rdkafka.lib` with MSVC). The test host links from this output.
 - CMake configure errors were checked: a shared rustls build, no `rustls.h`
   found, and a `rustls.h` whose `RUSTLS_VERSION_NUMBER` is not `0x000f0700`
   each stop with a FATAL_ERROR that names the cause.

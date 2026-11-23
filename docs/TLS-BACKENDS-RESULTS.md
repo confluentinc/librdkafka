@@ -50,8 +50,18 @@ A separate experiment confirmed the linking model: a C function that called
 installed when both used the rustls-ffi rlib, and saw NULL when the C function
 used `librustls.dylib` from the rustls-ffi v0.15.7 macOS release.
 
-Not run: Linux and Windows for the current rustls backend, the Windows
-`rustls-cng-crypto` provider ([steps](../packaging/rustls/WINDOWS-CHECKS.md)),
+Later on 2026-11-23 the first Windows run with `rustls-cng-crypto` found two
+defects: librdkafka rejected the "unknown" certificate/key match result of CNG
+keys (7601), and an empty provider gave a vague error (7112). Both are fixed
+([Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)). The test host
+reproduces them on macOS with `--opaque-keys` and `--empty-provider`. Before
+the fix, `key_match --opaque-keys` failed with 7601 and the empty-provider
+check failed with 7112. After the fix, `rustls.sh --fips` passed again,
+including `key_match` (match and 7600 mismatch), the opaque-key match, the
+empty-provider refusal, and Kafka acceptance with the opaque-key client.
+
+Not run: Linux for the current rustls backend, the repeated Windows
+`rustls-cng-crypto` run ([steps](../packaging/rustls/WINDOWS-CHECKS.md)),
 the OpenSSL positive required-mode checks on macOS (no OpenSSL FIPS provider
 installed), and the existing `tests/` regression runner.
 

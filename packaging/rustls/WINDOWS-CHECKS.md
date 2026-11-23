@@ -5,8 +5,53 @@
 The rustls backend now links no rustls-ffi. A Rust application links static
 librdkafka and rustls-ffi 0.15.7 and installs the crypto provider. The planned
 Windows provider is `rustls-cng-crypto` 0.1.2, which uses the Windows CNG
-module. **This route has not run on Windows yet.** The steps below are the test
-that remains.
+module. The first Windows run (below) found two librdkafka defects, which are
+now fixed; the steps further down are the test to repeat.
+
+### First run with `rustls-cng-crypto`, 2026-11-23
+
+Windows Server 2022 (build 20348) on Azure, MSVC, branch commit `097affaa`,
+static `rdkafka.lib`, host built with `--no-default-features` and the `cng` or
+`cng-fips` feature. Kafka ran in Docker on a Linux host in the same network.
+
+Passed:
+
+- Build and linkage: `rdkafka.lib` defines no `rustls_*` and no AWS-LC
+  symbols and has 49 undefined `rustls_*` references. The host executable
+  imports `bcrypt.dll` and `bcryptprimitives.dll` and no rustls or AWS-LC DLL.
+  `cargo tree` has no `aws-lc` or `ring` crate.
+- Legacy FIPS policy off: the no-provider refusal, the `policy unavailable`
+  refusal of strict clients, the certificate buffers and the handshake deadline
+  with `cng`.
+- Legacy FIPS policy on: the handshake deadline with `cng-fips`. With the
+  ordinary `cng` provider the host reports `fips=false`, and required mode
+  refuses with "does not report FIPS mode".
+
+Failed, because of librdkafka defects fixed after `097affaa`:
+
+- Every client certificate failed at `rd_kafka_new` with "rustls client
+  certificate/private key match failed: keys may not be consistent: Unknown
+  (7601)". `rustls-cng-crypto` signing keys do not expose a public key, so
+  rustls reports `InconsistentKeys::Unknown`. rustls itself accepts that result
+  ([rustls 0.23.46 `signer.rs`](https://github.com/rustls/rustls/blob/v/0.23.46/rustls/src/crypto/signer.rs),
+  "Don't treat unknown consistency as an error"), but librdkafka treated it as
+  fatal. This failed Kafka acceptance with `cng` (the readiness probe uses
+  mTLS), Kafka acceptance with `cng-fips --fips`, and `fips_cert_buffers` with
+  `cng-fips`. librdkafka now accepts the unknown result and still rejects
+  `RUSTLS_RESULT_INCONSISTENT_KEYS_KEYS_MISMATCH` (7600) and every other error.
+- With the legacy policy off, `rustls_cng_crypto::fips_provider()` has no
+  cipher suites, and even ordinary client creation failed with the vague
+  "rustls client configuration failed: general error (7112)". librdkafka now
+  refuses such a provider with "the process-default rustls crypto provider has
+  no cipher suites".
+- `pkg-config --static --libs rdkafka-static` named `librdkafka.a`, but MSVC
+  builds `rdkafka.lib`. The generated static `.pc` files now use the platform's
+  static library prefix and suffix.
+
+The macOS test host now reproduces both librdkafka defects with stand-ins:
+`--opaque-keys` wraps each loaded key so that `public_key()` returns `None`,
+and `--empty-provider` removes all suites and groups. Without the fixes they
+fail with the same 7601 and 7112 errors; with the fixes they pass.
 
 The 2026-11-22 run further down is history. Its OpenSSL and no-TLS results
 still describe those backends. Its rustls and rustls FIPS rows describe the
@@ -77,6 +122,7 @@ runs in Docker on a Linux host; set `DOCKER_HOST=tcp://<linux-host>:2375`.
    static library and the Windows system libraries that `rdkafka.lib` needs:
 
    ```bat
+   rem Or use: pkg-config --static --libs rdkafka-static (fixed after 097affaa).
    set RDKAFKA_STATIC_LIBS=C:\val\rustls-install\lib\rdkafka.lib -lws2_32 -lsecur32
    set CARGO_TARGET_DIR=C:\val\host-cng
    cargo build --locked --release --no-default-features --features cng
@@ -96,19 +142,22 @@ runs in Docker on a Linux host; set `DOCKER_HOST=tcp://<linux-host>:2375`.
 5. Write one `.cmd` wrapper for each program, for example `client-cng.cmd`
    containing `@C:\val\host-cng\release\rdkafka-rustls-host.exe client %*`.
    Make wrappers for `policy`, `cert_buffers`, `fips_cert_buffers`,
-   `handshake_timeout` and `no_provider` the same way, for both hosts.
+   `handshake_timeout`, `no_provider` and `key_match` the same way, for both
+   hosts.
 
 6. Run from `tests\tls_backend`:
 
    ```bat
    python focused.py --no-provider no_provider-cng.cmd --policy policy-cng.cmd ^
-     --cert-buffers cert_buffers-cng.cmd
+     --cert-buffers cert_buffers-cng.cmd --key-match-opaque key_match-cng.cmd
    python timeout_check.py --client handshake_timeout-cng.cmd
    python acceptance.py --client client-cng.cmd
    ```
 
    Expected: every check passes. With `default_provider()` the provider reports
-   FIPS false, so the `unavailable` policy run must refuse strict clients.
+   FIPS false, so the `unavailable` policy run must refuse strict clients. CNG
+   keys hide their public key, so use `--key-match-opaque` (a matching pair
+   must work; a mismatch cannot be detected before the handshake).
 
 7. Repeat with the FIPS provider, once with the legacy FIPS policy disabled and
    once with it enabled (`HKLM\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy`,
@@ -119,6 +168,12 @@ runs in Docker on a Linux host; set `DOCKER_HOST=tcp://<linux-host>:2375`.
      --fips-cert-buffers fips_cert_buffers-cng-fips.cmd
    python acceptance.py --fips --client client-cng-fips.cmd
    ```
+
+   With the policy disabled, also make `no_provider-installed-cng-fips.cmd`
+   containing `@C:\val\host-cng-fips\release\rdkafka-rustls-host.exe
+   --install-provider no_provider %*` and run
+   `python focused.py --empty-provider no_provider-installed-cng-fips.cmd`.
+   The real, empty FIPS provider must be refused with "has no cipher suites".
 
    Record the `fips=` value that the host prints for each policy state.
    Expected from the measured flag behavior: `fips=false` with the policy

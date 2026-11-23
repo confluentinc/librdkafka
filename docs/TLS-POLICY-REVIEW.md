@@ -20,8 +20,9 @@ CMVP certificate.
   keys are refused by the strict profile: even unencrypted EC decoding can
   derive a public key using the ordinary context. Use `ssl.key.location` or
   `ssl.key.pem`, which are decoded inside the selected strict client context.
-  Rustls key setters use the explicitly selected provider; ordinary-provider
-  imports cannot subsequently become strict clients.
+  Rustls key setters use the application's process-default provider and,
+  in required mode, require it to report FIPS; keys imported without the
+  required policy cannot subsequently become strict clients.
 - Public certificate/CA setter ownership, immediate parsing, invalid replacement,
   clearing and duplication remain available in ordinary builds. OpenSSL client
   initialization now acquires references to shared CA stores and certificate
@@ -43,9 +44,10 @@ CMVP certificate.
   buffered application/handshake output rather than flushing canceled bytes.
   Deterministic cancellation tests assert zero write callbacks and zero app
   bytes after unblocking immediately before close.
-- Exact-system AWS-LC archive symbols are hidden inside the shared wrapper;
-  unsafe FIPS static-consumer packaging is rejected. Mixed OpenSSL/shared-rustls
-  process tests verify both library orders and the real OpenSSL version.
+- The rustls backend links no rustls-ffi or crypto module. A second
+  rustls-ffi copy would have its own process-default provider, so librdkafka
+  uses the application's copy and is built static only. (An earlier AWS-LC
+  mode hid archive symbols and rejected static FIPS builds; it is removed.)
 - Rustls alternative credential/trust sources are mutually exclusive, avoiding
   silent precedence differences from OpenSSL. Temporary private-key and Base64
   buffers are wiped. Authentication feature reporting is gated by implemented
@@ -81,14 +83,14 @@ an isolated client configuration. Its successful runtime test establishes only
 the observed approved-mode enforcement path.
 
 See the main guide for integrated Kafka acceptance and build-matrix results.
-A positive rustls FIPS runtime artifact was subsequently built using the exact
-AWS-LC 4.0.0 policy source; its results and restrictions are recorded in
-`packaging/rustls/EXACT-FIPS-MODULE.md`. A Windows x64 runtime run with the
-aws-lc-fips-sys 0.14.3 module is recorded in `packaging/rustls/WINDOWS-CHECKS.md`.
-Native macOS execution, applicable operating-environment evidence and deployment
-qualification remain separate requirements. The Windows run used real Kafka and
-the fault proxy, not the socketpair test, so it does not establish all Windows
-socket edge cases or a performance qualification.
+The rustls checks now run through the Rust test host in
+`tests/tls_backend/rustls_host`, which installs a stand-in provider. On macOS
+arm64 they passed with the aws-lc-rs provider and with the rustls FIPS
+provider; see the results file. Earlier rustls runtime results (exact AWS-LC
+4.0.0 on Linux, aws-lc-fips-sys 0.14.3 on Windows) were for the removed AWS-LC
+mode. The Windows CNG provider route has not run. Applicable
+operating-environment evidence and deployment qualification remain separate
+requirements.
 
 ## Manual policy verification
 

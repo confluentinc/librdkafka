@@ -104,7 +104,9 @@ If the version is out of date, please [create an issue or pull request](https://
 
 This experimental branch also provides [build-selected OpenSSL/rustls broker TLS
 and an opt-in FIPS enforcement profile](docs/TLS-BACKENDS.md), with real Kafka
-Testcontainers tests and explicit qualification limits.
+Testcontainers tests and explicit qualification limits. The rustls backend is a
+static library for Rust applications that supply rustls-ffi 0.15.7 and install
+the crypto provider.
 
 ### Requirements
 	The GNU toolchain

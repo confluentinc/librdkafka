@@ -38,13 +38,16 @@ validation, replacement/clear and config duplication are preserved. Rustls
 strict setters select/check their FIPS provider first; keys imported through an
 ordinary provider before selecting required mode are rejected by provenance.
 
-Rustls required mode explicitly selects the feature-gated FIPS provider and
-checks provider, client-config and completed-connection FIPS status. It also
-checks its provider RNG and imports keys/verifies certificates with that same
-provider. A pinned ordinary FFI lacks the required symbol and fails required
-initialization with a named error. No private Rust symbols or a libcrypto
-compatibility facade are used. This branch does not qualify AWS-LC services by
-inference from a Cargo feature or boolean.
+Rustls required mode uses the crypto provider that the application installed
+as the rustls process default. librdkafka links no rustls-ffi and no crypto
+module, and it never substitutes another provider. It checks provider,
+client-config and completed-connection FIPS status, checks the provider RNG,
+and imports keys and verifies certificates with that same provider. With no
+installed provider, or a provider that does not report FIPS, required
+initialization fails with a named error. The module behind the provider, and
+whether a `fips()` result of true matches a validated configuration, is the
+application's evidence. This branch does not qualify a module by inference from
+a Cargo feature or boolean.
 
 Built-in OIDC is rejected by the SSL-only profile. Curl HTTPS, JWT signing,
 external Kerberos and application token acquisition need separate crypto/trust
@@ -56,10 +59,10 @@ those unrelated services.
 
 - The initial source/remotes match the report; origin/master and upstream/master
   were equal at branch creation. Original checkout was preserved.
-- The pinned manifest requires Rust 1.85 and rustls 0.23.46. The tagged lockfile
-  selects aws-lc-rs 1.18.2, ordinary aws-lc-sys 0.46.0 and optional FIPS sys 0.14.3.
-  [Manifest](https://github.com/rustls/rustls-ffi/blob/v0.15.7/librustls/Cargo.toml),
-  [lockfile](https://github.com/rustls/rustls-ffi/blob/v0.15.7/Cargo.lock).
+- The pinned manifest requires Rust 1.85 and rustls 0.23.46
+  ([manifest](https://github.com/rustls/rustls-ffi/blob/v0.15.7/librustls/Cargo.toml)).
+  The crypto crates in a product come from the application's lock file, not
+  from librdkafka.
 - CMVP [#5586](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5586)
   identifies OpenSSL FIPS Provider; the host actually reports a **Red Hat
   Enterprise Linux OpenSSL FIPS Provider**, version `3.5.9-da9af220b1c05159` from
@@ -72,22 +75,21 @@ those unrelated services.
   alter global OpenSSL policy. Older provider versions may not expose newer
   parameters; the core security check and every applicable advertised control
   are enforced. The exact module policy still needs an external review.
-- AWS-LC FIPS sys 0.14.3 bundles a 4.2.0 snapshot, while CMVP
-  [#5596 static](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5596)
-  and [#5595 dynamic](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5595)
-  name module 4.0.0. No claim transfers from those policies to the snapshot.
-  [Vendor release](https://github.com/aws/aws-lc-rs/releases/tag/v1.18.2).
-- The static policy names source
-  `1276fc7d9cd0f509000294e9657914c3a23e65d2` with archive SHA256
-  `33b5443d2213bfca45071b300daeb45decf13e3b46f726890b48d6267968f049`,
-  and specific Amazon Linux 2023/EC2 environments. Its unmodified source was
-  downloaded, digest checked and built separately for compatibility investigation
-  on this Fedora host. This does not satisfy that operating-environment condition.
-  See `packaging/rustls/EXACT-FIPS-MODULE.md` for the successful exact-source linking experiment, generated-binding
-  requirements and symbol-isolation limits. No validation coverage is inferred.
-- Runtime and static dependency inspections are distinct. The ordinary FFI
-  contains version-namespaced AWS-LC objects; an absence of dynamic OpenSSL
-  imports alone does not establish absence of embedded crypto. Complete
+- Earlier revisions of this branch linked AWS-LC into librdkafka and tested
+  the aws-lc-fips-sys 0.14.3 snapshot and an exact AWS-LC 4.0.0 source build.
+  That mode is removed; its notes are history and are not evidence for the
+  current backend.
+- For Windows, Microsoft validates the CNG modules (`bcryptprimitives.dll`,
+  CMVP #5410 for Windows 11 22H2 and Windows Server 2022 build
+  10.0.20348.1668), not applications
+  ([Microsoft](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation)).
+  `rustls-cng-crypto` 0.1.2 reports FIPS from `BCryptGetFipsAlgorithmMode`.
+  Whether that flag tracks the legacy FIPS policy, which Microsoft calls
+  unnecessary since the April 2024 updates, is unverified. See
+  `packaging/rustls/WINDOWS-CHECKS.md`.
+- Runtime and static dependency inspections are distinct. The application
+  binary holds the provider's crypto; an absence of dynamic crypto imports
+  alone does not establish absence of embedded crypto. Complete
   artifact-specific notices/SBOM and module discovery evidence remain release work.
 
 ## Deployment checklist (all needed for a claim)

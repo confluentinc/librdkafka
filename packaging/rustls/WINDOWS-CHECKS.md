@@ -1,11 +1,137 @@
-# Native Windows x64 checks, 2026-11-22
+# Native Windows x64 checks
+
+## Status after the provider change, 2026-11-23
+
+The rustls backend now links no rustls-ffi. A Rust application links static
+librdkafka and rustls-ffi 0.15.7 and installs the crypto provider. The planned
+Windows provider is `rustls-cng-crypto` 0.1.2, which uses the Windows CNG
+module. **This route has not run on Windows yet.** The steps below are the test
+that remains.
+
+The 2026-11-22 run further down is history. Its OpenSSL and no-TLS results
+still describe those backends. Its rustls and rustls FIPS rows describe the
+removed AWS-LC mode, in which `rdkafka.dll` imported `rustls.dll` or an
+aws-lc-fips-sys DLL. They are not evidence for the current rustls backend.
+
+### Facts to know before the test
+
+- Microsoft validates the CNG modules, not applications: "Microsoft validates
+  the cryptographic modules used in Windows and other products, not individual
+  Windows services or applications." The user-mode module is the Cryptographic
+  Primitives Library (`bcryptprimitives.dll`). Its CMVP certificate is #5410 for
+  Windows 11 22H2 and for Windows Server 2022 build 10.0.20348.1668, and #4825
+  for Windows Server 2022 build 10.0.20348
+  ([overview](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation),
+  [Windows 11](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/validations/fips-140-windows11),
+  [Server 2022](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/validations/fips-140-windows-server-2022)).
+- The same overview says that since the April 2024 quality updates (KB5036893,
+  KB5036909) the modules run their self-tests automatically, and that the
+  "legacy FIPS policy" ("System cryptography: Use FIPS-compliant algorithms for
+  encryption, hashing, and signing") is no longer needed except for a BitLocker
+  case.
+- `rustls-cng-crypto` 0.1.2 reports `fips()` for its random source and key
+  provider from `BCryptGetFipsAlgorithmMode` (crate source `src/fips.rs`,
+  `src/lib.rs`). `fips_provider()` keeps only FIPS-approved suites and groups;
+  `default_provider()` includes others, so its `fips()` is false.
+  `fips.rs` calls `.unwrap()` on the `BCryptGetFipsAlgorithmMode` result.
+- **Unverified:** whether `BCryptGetFipsAlgorithmMode` reports the legacy FIPS
+  policy setting or the module's state after April 2024. No source read for this
+  branch states it. If it reads only the legacy policy, `ssl.fips.mode=required`
+  refuses a CNG provider on a host without that policy, even though Microsoft
+  calls the policy unnecessary.
+
+### The remaining Windows test
+
+Run in a "x64 Native Tools" prompt (MSVC), with Rust stable, CMake, Ninja,
+Python 3.11 or newer and `tests/tls_backend/requirements.txt` in a venv. Kafka
+runs in Docker on a Linux host; set `DOCKER_HOST=tcp://<linux-host>:2375`.
+
+1. Get the header from the locked rustls-ffi package:
+
+   ```bat
+   cd tests\tls_backend\rustls_host
+   cargo fetch --locked
+   cargo metadata --locked --format-version 1 > %TEMP%\meta.json
+   ```
+
+   `RUSTLS_INCLUDE_DIR` is the directory of the `rustls-ffi` package
+   `manifest_path` plus `\src` (it holds `rustls.h`).
+
+2. Build static librdkafka:
+
+   ```bat
+   cmake -S C:\src\librdkafka -B C:\val\rustls -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+     -DRDKAFKA_TLS_BACKEND=rustls -DRUSTLS_INCLUDE_DIR=<dir> -DRDKAFKA_BUILD_STATIC=ON ^
+     -DWITH_CURL=OFF -DWITH_SASL=OFF -DWITH_ZLIB=OFF -DWITH_ZSTD=OFF -DENABLE_LZ4_EXT=OFF ^
+     -DCMAKE_INSTALL_PREFIX=C:\val\rustls-install
+   cmake --build C:\val\rustls
+   cmake --install C:\val\rustls
+   ```
+
+3. Build the host twice, once per CNG provider. `RDKAFKA_STATIC_LIBS` lists the
+   static library and the Windows system libraries that `rdkafka.lib` needs:
+
+   ```bat
+   set RDKAFKA_STATIC_LIBS=C:\val\rustls-install\lib\rdkafka.lib -lws2_32 -lsecur32
+   set CARGO_TARGET_DIR=C:\val\host-cng
+   cargo build --locked --release --no-default-features --features cng
+   set CARGO_TARGET_DIR=C:\val\host-cng-fips
+   cargo build --locked --release --no-default-features --features cng-fips
+   ```
+
+   The transport whitebox test is Unix only, so `RDKAFKA_CONFIG_DIR` is not
+   needed on Windows.
+
+4. Inspect the binaries. `dumpbin /dependents` must name no rustls or
+   aws-lc DLL. `dumpbin /symbols` on `rdkafka.lib` must show `rustls_*` only as
+   `UNDEF`. `cargo tree --locked -e normal --target x86_64-pc-windows-msvc
+   --no-default-features --features cng-fips -i rustls` must show one rustls
+   0.23.46, and the graph must contain no aws-lc crate.
+
+5. Write one `.cmd` wrapper for each program, for example `client-cng.cmd`
+   containing `@C:\val\host-cng\release\rdkafka-rustls-host.exe client %*`.
+   Make wrappers for `policy`, `cert_buffers`, `fips_cert_buffers`,
+   `handshake_timeout` and `no_provider` the same way, for both hosts.
+
+6. Run from `tests\tls_backend`:
+
+   ```bat
+   python focused.py --no-provider no_provider-cng.cmd --policy policy-cng.cmd ^
+     --cert-buffers cert_buffers-cng.cmd
+   python timeout_check.py --client handshake_timeout-cng.cmd
+   python acceptance.py --client client-cng.cmd
+   ```
+
+   Expected: every check passes. With `default_provider()` the provider reports
+   FIPS false, so the `unavailable` policy run must refuse strict clients.
+
+7. Repeat with the FIPS provider, once with the legacy FIPS policy disabled and
+   once with it enabled (`HKLM\SYSTEM\CurrentControlSet\Control\Lsa\FipsAlgorithmPolicy`,
+   `Enabled` = 1, then reboot):
+
+   ```bat
+   python focused.py --positive-policy policy-cng-fips.cmd ^
+     --fips-cert-buffers fips_cert_buffers-cng-fips.cmd
+   python acceptance.py --fips --client client-cng-fips.cmd
+   ```
+
+   Record the `fips=` value that the host prints for each policy state. That
+   answers the open `BCryptGetFipsAlgorithmMode` question for this build. If
+   the provider reports false, the positive runs must fail with "does not
+   report FIPS mode"; record that, and do not count it as a pass.
+
+`acceptance.py` and `focused.py` start the wrappers with `subprocess`. If
+Python does not run `.cmd` files directly on the VM, build one small `.exe`
+launcher or run each program through `cmd /c`; record which one you used.
+
+## History: 2026-11-22 run (OpenSSL, no TLS and the removed AWS-LC rustls mode)
 
 These checks ran on branch commit `966b43d0f23d1328ae160eca464238ff4c74617b`
 on a disposable Azure VM. The VM was deleted after the run. This is engineering
 evidence for build, linkage and runtime behavior. It is not FIPS qualification,
 and it does not establish the CMVP status of any module on Windows.
 
-## Environment
+### Environment
 
 - Windows Server 2022 Datacenter Azure Edition, `Standard_D8s_v5`, x86_64.
 - Visual Studio 2022 Build Tools, MSVC 14.44.35207 (`v143`), CMake 4.5, Ninja.
@@ -22,7 +148,7 @@ and it does not establish the CMVP status of any module on Windows.
 and OpenSSL 3) were not run. `fips_checks.py` was not run because no OpenSSL
 FIPS provider was installed.
 
-## Builds
+### Builds
 
 | Build | Result |
 |---|---|
@@ -59,7 +185,7 @@ aws_lc_fips_0_14_3_crypto.lib legacy_stdio_definitions.lib kernel32.lib
 ntdll.lib userenv.lib ws2_32.lib dbghelp.lib /defaultlib:msvcrt
 ```
 
-## Linkage facts for the FIPS build
+### Linkage facts for the FIPS build
 
 - aws-lc-fips-sys builds the module as `aws_lc_fips_0_14_3_crypto.dll`. The
   Rust static library `rustls_ffi.lib` links to its import library. Ship this
@@ -98,7 +224,7 @@ builds a non-FIPS library without an error. Required mode then refuses every
 client at runtime. Read `WITH_RUSTLS_FIPS` in the generated `config.h` after
 each configure.
 
-## Configure and test commands
+### Configure and test commands
 
 Each build ran inside `vcvars64.bat`:
 
@@ -128,7 +254,7 @@ python acceptance.py --client <openssl>\client.exe --client <rustls>\client.exe 
 python acceptance.py --fips --client <fips>\client.exe
 ```
 
-## Results
+### Results
 
 | Check | OpenSSL | No TLS | rustls | rustls FIPS |
 |---|---|---|---|---|
@@ -154,7 +280,7 @@ The first test run failed for the ordinary rustls variant with
 `rustls.dll`. After the copy, all rustls checks passed. This failure is not
 counted as a pass.
 
-## Open items
+### Open items
 
 - The OpenSSL required-policy refusal logged a module path with each backslash
   and the next character removed, for example

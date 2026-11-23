@@ -1,12 +1,77 @@
 # Executed checks and remaining acceptance criteria
 
+This is runtime and build evidence, with no qualified deployment claim.
+
+## Current results: rustls with the application's provider, 2026-11-23
+
+Host: macOS 26 (Darwin 25.6.0) arm64, Apple clang, CMake, Rust/Cargo 1.97.1,
+Python 3.14.6, Docker 27.4 with `apache/kafka:4.1.1`, Homebrew OpenSSL 3.
+Branch head for code: `5e15fecd`. The rustls backend links no rustls-ffi; the
+Rust test host links rustls-ffi 0.15.7 (rustls 0.23.46) and installs a stand-in
+provider: aws-lc-rs 1.19.0 (aws-lc-sys 0.47.0) or the rustls FIPS provider
+(aws-lc-fips-sys 0.14.4).
+
+Command, from the branch root:
+
+```sh
+caffeinate -ims tests/tls_backend/run.sh --rustls-fips
+```
+
+The run used a scratch copy of `run.sh` that skips the venv and pip steps and
+uses an existing venv. The local package proxy did not offer
+`certifi==2026.11.20` from `requirements.txt`, so that venv has
+`certifi==2026.10.23`; all other pins match. The laptop slept during earlier
+runs: two Kafka runs failed with a consumer `FetchRequest` timed out after 15 to
+18 minutes, which matches the sleep records in `pmset -g log`. Those runs are
+not counted. The counted run used `caffeinate` on AC power.
+
+```text
+Check                                   OpenSSL  No TLS  rustls aws-lc-rs  rustls FIPS stand-in
+Required-policy refusal (unavailable)   PASS     PASS    PASS              n/a
+Positive required policy (available)    n/a      n/a     n/a               PASS
+No installed provider refuses           n/a      n/a     PASS              n/a
+Certificate buffers, PEM/DER            PASS     n/a     PASS              n/a
+Strict key import (fips_cert_buffers)   n/a      n/a     n/a               PASS
+Transport whitebox (socketpair)         n/a      n/a     PASS              n/a
+Stalled handshake deadline              PASS     n/a     PASS              n/a
+Kafka acceptance, ordinary policy       PASS     n/a     PASS              n/a
+Kafka acceptance, --fips                n/a      n/a     n/a               PASS
+```
+
+`rustls.sh` also checks linkage before the tests: `nm -g librdkafka.a` has no
+defined `rustls_*` or AWS-LC symbols, and each host binary has exactly one
+`rustls_version` definition and no rustls dynamic library. The FIPS host loads
+`libaws_lc_fips_0_14_4_crypto.dylib`, because aws-lc-fips-sys builds the module
+as a shared library on macOS. Configure/mklove static-only rustls builds and
+the CMake error cases are in [build checks](../packaging/rustls/CHECKS.md).
+
+A separate experiment confirmed the linking model: a C function that called
+`rustls_crypto_provider_default()` saw the provider that a Rust `main`
+installed when both used the rustls-ffi rlib, and saw NULL when the C function
+used `librustls.dylib` from the rustls-ffi v0.15.7 macOS release.
+
+Not run: Linux and Windows for the current rustls backend, the Windows
+`rustls-cng-crypto` provider ([steps](../packaging/rustls/WINDOWS-CHECKS.md)),
+the OpenSSL positive required-mode checks on macOS (no OpenSSL FIPS provider
+installed), and the existing `tests/` regression runner.
+
+## History: 2026-11-22 results before the provider change
+
+These results are for commit `83d4be55` and earlier. The OpenSSL and no-TLS
+results still describe those backends. Every rustls result in this section is
+for the removed AWS-LC mode, in which librdkafka linked its own rustls-ffi
+(ordinary aws-lc-rs, aws-lc-fips-sys 0.14.3 or an exact AWS-LC 4.0.0 build).
+They are not evidence for the current rustls backend. `EXACT-FIPS-MODULE.md`
+and `install-dev-dependency.sh` were removed with that mode; recover them from
+commit `83d4be55` if needed.
+
 Implementation host: Fedora 43 x86_64, kernel 7.3.3, GCC 15.3.1, CMake 3.31.11,
 Rust/Cargo 1.90.0, Go 1.26.10, Python 3.14.10, Podman 5.8.9 Docker-compatible API.
 Branch began at `ad4391a0e433a275f4c07a26f98ad70142b3e3a0`; origin/master and
 upstream/master were identical. The original checkout remained separate.
 This is runtime/build evidence, with no qualified deployment claim.
 
-## Build and consumer results
+### Build and consumer results
 
 Passed native CMake C/C++ builds: ordinary OpenSSL, no TLS, ordinary rustls shared
 and static, and rustls shared with the exact-policy AWS-LC FIPS 4.0.0 source.
@@ -17,13 +82,13 @@ DT_NEEDED contained no OpenSSL. The exact-module shared wrapper hides native
 crypto archive symbols and passed mixed OpenSSL 3 process tests in both link
 orders. Unsafe FIPS static packaging is rejected; configure installation omits
 those archives and static metadata. See [build checks](../packaging/rustls/CHECKS.md)
-and [exact module experiment](../packaging/rustls/EXACT-FIPS-MODULE.md) for commands,
+and the exact module experiment (removed file `EXACT-FIPS-MODULE.md`) for commands,
 artifact hashes, source comparison, features and notices.
 
 Public C/C++ headers were not changed. C++ libraries and installed consumers
 build. This is not a complete downstream ABI/bindings certification.
 
-## Kafka and transport results
+### Kafka and transport results
 
 The same Testcontainers fixture passed against four client variants:
 
@@ -60,7 +125,7 @@ A stalled TLS peer test passed on both backends: broker-owned connection setup
 timeouts close a peer that accepts TCP but never completes TLS. This peer does
 not emulate Kafka. The real Kafka suite remains an independent requirement.
 
-## Policy and regression results
+### Policy and regression results
 
 Passed focused configuration and certificate tests on OpenSSL, ordinary rustls
 and no-TLS builds: required-mode refusal without capability; disabled certificate
@@ -83,7 +148,7 @@ because this build does not support its engine property. Broker-dependent `0097`
 covers the implemented broker scope, while broader authentication remains out
 of strict scope. The full upstream test suite was not run.
 
-## Commands and local logs
+### Commands and local logs
 
 From the branch root the complete entry point is `tests/tls_backend/run.sh`.
 The exact implementation-host invocation was:
@@ -126,7 +191,7 @@ Results: `/tmp/rdk-regression-tests.log`; full-feature build:
 `/tmp/rdk-build-regression.log`. Focused controls are also available independently
 through `tests/tls_backend/focused.py`, `fips_checks.py` and `timeout_check.py`.
 
-## Failed attempts and corrections
+### Failed attempts and corrections
 
 - Default rootless pasta startup failed because this execution environment denied
   its sandbox tmpfs mount. No mocked/external broker was substituted. A local
@@ -159,7 +224,7 @@ through `tests/tls_backend/focused.py`, `fips_checks.py` and `timeout_check.py`.
 - ASan/UBSan execution was unavailable because this host's GCC sanitizer library
   symlinks reference missing runtime files. Sanitizer execution remains pending.
 
-## Native Windows x64 results
+### Native Windows x64 results
 
 On 2026-11-22 a disposable Windows Server 2022 x64 VM built and ran this
 branch with MSVC 14.44. The `win32` MSBuild solution and the CMake `openssl`,
@@ -173,7 +238,7 @@ on Windows. On Windows the FIPS module is a separate DLL with prefixed names,
 and `rdkafka.dll` exports no crypto names. Commands, linkage facts and open
 items are in [Windows checks](../packaging/rustls/WINDOWS-CHECKS.md).
 
-## Unmet criteria and limitations
+### Unmet criteria and limitations
 
 Native macOS execution and installed-package qualification remain unmet; no
 native macOS host was available. Windows x64 has build and runtime evidence
@@ -190,7 +255,7 @@ throughput/tail-latency/RSS comparisons remain pending or explicitly unsupported
 The branch is buildable/testable, not a released or assessed FIPS product.
 No PR, upstream modification, merge or release is authorized or performed.
 
-## Local runtime workaround and cleanup
+### Local runtime workaround and cleanup
 
 This host already had an active rootless Podman socket, but its default pasta
 helper could not create its sandbox. The local alternative was a verified
@@ -222,7 +287,7 @@ pause-triggered purge failure accounting. Final implementation reviews reported
 no remaining actionable finding in the exercised Linux paths; the limitations
 above remain open.
 
-## Delivery
+### Delivery
 
 The tested branch was pushed to
 [origin/feat/tls-backends-fips](https://github.com/j7nw4r/librdkafka/tree/feat/tls-backends-fips).

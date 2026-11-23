@@ -1,4 +1,40 @@
-# Build integration checks, Linux x86_64, 2026-11-22
+# Build integration checks
+
+## Current rustls backend, macOS arm64, 2026-11-23
+
+These checks ran on macOS 26 (Darwin 25.6.0) arm64 with Apple clang, CMake,
+Rust 1.97.1 and Docker 27.4. The rustls backend links no rustls-ffi; see
+[DEPENDENCIES.md](DEPENDENCIES.md).
+
+Passed:
+
+- CMake `RDKAFKA_TLS_BACKEND=rustls -DRDKAFKA_BUILD_STATIC=ON` with
+  `RUSTLS_INCLUDE_DIR` set to the rustls-ffi 0.15.7 crate's `src`: C and C++
+  archives build and install. The header check passes without a link.
+  Examples and tests are turned off. The installed `rdkafka-static.pc` has no
+  rustls requirement and says that the application supplies rustls-ffi.
+- `nm -g librdkafka.a` shows no defined `rustls_*`, `aws_lc` or `awslc`
+  symbols. The `rustls_*` references are undefined, and no AWS-LC constructor
+  is referenced.
+- The Rust test host (`tests/tls_backend/rustls_host`) links that archive and
+  the rustls-ffi rlib. Each host binary has one `rustls_version` definition and
+  no rustls dynamic library dependency. The FIPS stand-in host depends on
+  `libaws_lc_fips_0_14_4_crypto.dylib`, which aws-lc-fips-sys builds as a
+  shared library on macOS; librdkafka itself still has no AWS-LC code.
+- CMake configure errors were checked: a shared rustls build, no `rustls.h`
+  found, and a `rustls.h` whose `RUSTLS_VERSION_NUMBER` is not `0x000f0700`
+  each stop with a FATAL_ERROR that names the cause.
+- Configure/mklove `--with-tls-backend=rustls --with-rustls-include-dir=DIR`
+  in a copied source, then `make -j8` and `make install`: only static C and
+  C++ archives and `-static.pc` files are built and installed. The archive
+  defines no rustls or AWS-LC symbols. The `TAGS` step printed a `ctags -e`
+  error from the macOS ctags, which is not specific to this branch.
+
+## History: Linux x86_64 checks, 2026-11-22
+
+The rustls items below describe the removed AWS-LC mode, in which librdkafka
+linked a rustls-ffi release archive. They are not evidence for the current
+rustls backend.
 
 These checks ran on the implementation worktree based on
 `ad4391a0e433a275f4c07a26f98ad70142b3e3a0`. Native macOS and cross builds

@@ -29,10 +29,12 @@ Branch: `feat/tls-backends-fips`. Preserve the original checkout and public ABI.
 - [x] Verified TLS and required mTLS; wrong name/CA/expiry/client credential failures.
 - [x] Reconnect/disconnect, short writes, fragmentation, backpressure and buffered I/O.
 - [x] FIPS requirement refusal, insecure/unsupported options, isolation/no fallback.
-- [x] Positive required-mode runtime tests with OpenSSL and exact-source AWS-LC 4.0.0.
+- [x] Positive required-mode runtime tests with OpenSSL and, for rustls, an application-installed FIPS provider (macOS stand-in). The earlier AWS-LC 4.0.0 runs were for the removed AWS-LC mode.
+- [x] Rustls uses the application's process-default provider; librdkafka links no rustls-ffi (2026-11-23).
+- [ ] Windows run with `rustls-cng-crypto` ([steps](../packaging/rustls/WINDOWS-CHECKS.md)).
 - [ ] Policy-covered operating environment, release artifact/service evidence and qualification.
-- [x] Native Windows x64 build and execution ([Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)).
-- [ ] Native macOS (pending host); distinguish build configuration from execution.
+- [x] Native Windows x64 build and execution for OpenSSL, no TLS and the removed AWS-LC rustls mode ([Windows checks](../packaging/rustls/WINDOWS-CHECKS.md)).
+- [x] Native macOS arm64 execution for OpenSSL, no TLS and rustls with stand-in providers.
 - [x] Dependency/linkage inventory and qualification checklist, independent review.
 - [x] Coherent commits pushed to origin; no merge, release, upstream write or PR.
 

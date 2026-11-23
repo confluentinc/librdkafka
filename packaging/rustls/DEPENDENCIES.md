@@ -1,71 +1,85 @@
 # Experimental rustls dependency contract
 
-The broker adapter uses only the public C ABI of rustls-ffi **0.15.7**. Both build
-systems reject other pkg-config versions. The matching header is also checked
-by configure. CMake detects the feature-gated `rustls_default_fips_provider`
-symbol at link time. Its absence leaves ordinary TLS available and makes the
-runtime required policy fail; it does not trigger a provider substitution.
+The rustls backend uses only the public C ABI of rustls-ffi **0.15.7**, and it
+links no rustls-ffi library. librdkafka needs the 0.15.7 `rustls.h` at build
+time. The application supplies the library and the crypto provider at link and
+run time. See [the main guide](../../docs/TLS-BACKENDS.md#the-rustls-backend-uses-the-applications-provider).
 
-The ordinary Linux x86_64 development artifact is pinned by
-`install-dev-dependency.sh`: SHA-256
-`855ce5017c7f37ea505e343dd4bfc84c6591e635eb35bbfd931f14bbb61b426e`.
-The helper keeps the archive, headers, libraries and upstream license notices at
-the supplied external prefix, and relocates its pkg-config staging prefix.
-It does not modify host trust or module configuration. The release shared object
-embeds AWS-LC with version-prefixed symbols (`aws_lc_0_46_0_*`), and directly
-imports libc, libgcc_s and libm, not OpenSSL. `librustls.a` embeds the Rust and
-AWS-LC implementation; inspecting DT_NEEDED alone is insufficient.
+## Build-time contract
 
-Primary inputs checked on 2026-11-22:
+- CMake: `-DRDKAFKA_TLS_BACKEND=rustls -DRUSTLS_INCLUDE_DIR=DIR
+  -DRDKAFKA_BUILD_STATIC=ON`. Without `RUSTLS_INCLUDE_DIR`, CMake asks
+  pkg-config for `rustls = 0.15.7` for the include directory only. A shared
+  rustls build is a configure error.
+- Configure: `--with-tls-backend=rustls --with-rustls-include-dir=DIR`, or
+  pkg-config as above. Configure builds static libraries only.
+- Both build systems compile a test that requires `RUSTLS_VERSION_NUMBER ==
+  0x000f0700`. Neither links it.
+- The static archive defines no `rustls_*` or AWS-LC symbols. Its undefined
+  `rustls_*` references must resolve to the application's rustls-ffi.
 
-- [Tagged manifest](https://github.com/rustls/rustls-ffi/blob/v0.15.7/librustls/Cargo.toml):
-  Rust minimum 1.85, rustls exactly 0.23.46, ordinary defaults `aws-lc-rs` and
-  `prefer-post-quantum`; FIPS is a separate feature.
-- [Tagged lockfile](https://github.com/rustls/rustls-ffi/blob/v0.15.7/Cargo.lock):
-  aws-lc-rs 1.18.2, ordinary aws-lc-sys 0.46.0, optional aws-lc-fips-sys 0.14.3.
-- [Upstream build and linkage guidance](https://github.com/rustls/rustls-ffi/blob/v0.15.7/README.md):
-  C ABI version pinning remains required. Windows/macOS FIPS has additional
-  experimental dynamic-link requirements and is not qualified by this branch.
+The header source: rustls-ffi 0.15.7 has `links = "rustls_ffi"`, and its build
+script copies `src/rustls.h` to `$OUT_DIR/include` and prints
+`cargo:include=...` (crate source `rustls-ffi-0.15.7/build.rs`). A build script
+of a crate that depends directly on rustls-ffi therefore receives the directory
+as `DEP_RUSTLS_FFI_INCLUDE`.
 
-The FFI license is `Apache-2.0 OR ISC OR MIT`; the development archive retains all
-three notices. A distributor must additionally retain the applicable Rust,
-AWS-LC and transitive dependency notices and generate an artifact-specific SBOM.
-No complete redistributable SBOM is claimed for this experimental branch.
+## Application contract
 
-The pinned FIPS crate is not the validated AWS-LC 4.0.0 module merely because its
-feature contains the name FIPS. Its bundled 4.2.0 snapshot differs from the
-module version identified by CMVP #5595/#5596. A policy-built system module route has now been built and runtime-tested against
-the exact 4.0.0 policy source; see [the experiment](EXACT-FIPS-MODULE.md). It still
-requires applicable operating-environment and deployment evidence; no positive
-qualification is inferred here.
+- Depend on `rustls-ffi = "=0.15.7"` with `default-features = false`. The
+  crate's default features are `aws-lc-rs` and `prefer-post-quantum`; neither
+  is needed when the application installs its own provider. Add
+  `no_log_capture`, because otherwise rustls-ffi calls `log::set_logger` when
+  it creates a connection (crate source `src/log.rs`, `src/connection.rs`).
+- Reference the crate in Rust code (for example `use rustls_ffi as _;`), so
+  rustc links it. Emit librdkafka with `cargo:rustc-link-lib=static=rdkafka`
+  from a build script, so that it comes before the rlib on linkers that resolve
+  archives in order.
+- rustls-ffi 0.15.7 pins `rustls = "=0.23.46"`. A provider crate must accept
+  that rustls version so that Cargo builds one rustls copy.
+- Install the provider with `CryptoProvider::install_default()` before any TLS
+  client or private-key import. `rustls_crypto_provider_default()` returns
+  `CryptoProvider::get_default()` and does not install one from crate features
+  (crate source `src/crypto_provider.rs`; rustls 0.23.46 `src/crypto/mod.rs`).
+- At run time librdkafka refuses a rustls-ffi whose `rustls_version()` does not
+  start with `rustls-ffi/0.15.7/`.
 
-## Build and inspect manually
+The crate type of rustls-ffi 0.15.7 is `["lib", "staticlib"]`. Only the `lib`
+(rlib) form shares the application's provider state. The release archives
+(`librustls.a`, `librustls.dylib`, `rustls.dll`) each hold a separate rustls
+copy. A local experiment confirmed this: a C function that called
+`rustls_crypto_provider_default()` saw the provider that a Rust `main` installed
+when both used the rlib, and saw NULL when the C function used
+`librustls.dylib`.
 
-```sh
-packaging/rustls/install-dev-dependency.sh /absolute/external/rustls-0.15.7
-export PKG_CONFIG_PATH=/absolute/external/rustls-0.15.7/lib/pkgconfig
-export LD_LIBRARY_PATH=/absolute/external/rustls-0.15.7/lib
-cmake -S . -B /absolute/external/build-rustls \
-  -DRDKAFKA_TLS_BACKEND=rustls -DRDKAFKA_BUILD_TESTS=OFF
-cmake --build /absolute/external/build-rustls -j4
-readelf -d /absolute/external/build-rustls/src/librdkafka.so | grep NEEDED
-nm -g --defined-only /absolute/external/rustls-0.15.7/lib/librustls.a \
-  | grep aws_lc_0_46_0_
-```
+## Providers
 
-`RDKAFKA_TLS_BACKEND=openssl` retains the existing crypto and authentication
-capabilities; `none` removes broker TLS. An empty selector preserves the existing
-`WITH_SSL` behavior. `rustls` selects a broker-only artifact and disables curl,
-SCRAM, OAuth and external SASL crypto. Ordinary SASL PLAIN is compiled as before
-but is outside the strict broker SSL profile.
+librdkafka does not select or ship a provider. The provider decides the crypto
+module, the algorithms and the result of `fips()`. Examples:
 
-Configure uses `./configure --with-tls-backend=rustls` and the same pkg-config
-prefix. Run it in a copied checkout because mklove generates source-local
-`config.h` and `Makefile.config`; those files shadow CMake's generated header.
-`make -j4` then builds C and C++ libraries. Use `--with-tls-backend=none` or
-`openssl` for the other configurations. The checked-in Visual Studio projects
-retain OpenSSL and now include the common TLS dispatcher; rustls Windows builds
-must use CMake and matching target dependency metadata. Windows x64 builds and
-runtime tests passed, including a FIPS FFI build that needs Perl and ships
-`aws_lc_fips_0_14_3_crypto.dll`; see [WINDOWS-CHECKS.md](WINDOWS-CHECKS.md).
-Native macOS execution and distribution packaging remain pending.
+- `rustls::crypto::aws_lc_rs::default_provider()` (AWS-LC, non-FIPS build).
+- `rustls::crypto::default_fips_provider()` with the rustls `fips` feature
+  (aws-lc-fips-sys). On macOS aws-lc-fips-sys builds the module as a shared
+  library, `libaws_lc_fips_0_14_4_crypto.dylib` in the tested lock file.
+- `rustls_cng_crypto::fips_provider()` or `default_provider()` from
+  `rustls-cng-crypto` 0.1.2 on Windows (Windows CNG). It depends on
+  `rustls = "0.23.20"` with default features off, so it unifies with 0.23.46.
+
+The test host uses the first two as stand-ins and has optional features for the
+third. That is test scaffolding, not librdkafka support for a provider.
+
+## Licenses
+
+The rustls-ffi license is `Apache-2.0 OR ISC OR MIT`. A distributor of an
+application binary must retain the notices of rustls-ffi, rustls, the provider
+and their transitive dependencies, and generate an artifact-specific SBOM. No
+redistributable SBOM is claimed for this experimental branch.
+
+## Removed AWS-LC mode
+
+Before 2026-11-23 this branch linked a rustls-ffi release or source build
+(aws-lc-rs, or aws-lc-fips-sys for FIPS) into librdkafka, hid its archive
+symbols on ELF, rejected static FIPS builds and downloaded a pinned Linux
+archive with `install-dev-dependency.sh`. That mode, its helper and its exact
+AWS-LC 4.0.0 module experiment are removed. Results recorded for it are history
+and do not describe the current backend.

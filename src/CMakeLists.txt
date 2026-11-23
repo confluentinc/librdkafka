@@ -368,7 +368,7 @@ else()
     set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static, rustls: the application must link rustls-ffi 0.15.7 as a Rust dependency and install a rustls crypto provider)")
   endif()
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
-  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
+  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/${CMAKE_STATIC_LIBRARY_PREFIX}rdkafka${CMAKE_STATIC_LIBRARY_SUFFIX}")
   string(APPEND PKG_CONFIG_LIBS " ${PKG_CONFIG_LIBS_PRIVATE}")
   set(PKG_CONFIG_LIBS_PRIVATE "")
   configure_file(

@@ -18,6 +18,12 @@ p.add_argument("--no-provider", type=Path, action="append", default=[],
                help="rustls process-default build with no installed provider")
 p.add_argument("--fips-cert-buffers", type=Path, action="append", default=[],
                help="Requires a FIPS rustls provider")
+p.add_argument("--empty-provider", type=Path, action="append", default=[],
+               help="rustls host whose installed provider has no cipher suites")
+p.add_argument("--key-match", type=Path, action="append", default=[],
+               help="rustls certificate/key match and mismatch at client creation")
+p.add_argument("--key-match-opaque", type=Path, action="append", default=[],
+               help="rustls host whose provider keys hide their public key")
 a = p.parse_args()
 with tempfile.TemporaryDirectory(prefix="rdkafka-tls-unit-") as temp:
     root = Path(temp)
@@ -42,6 +48,14 @@ with tempfile.TemporaryDirectory(prefix="rdkafka-tls-unit-") as temp:
     for binary in a.fips_cert_buffers:
         subprocess.run([str(binary.resolve())] + [str(root / n) for n in ("ca.crt", "client.crt", "client.key")],
                        check=True, timeout=30)
+    for binary in a.empty_provider:
+        subprocess.run([str(binary.resolve()), str(root / "ca.crt"), str(root / "client.key"),
+                        "has no cipher suites"], check=True, timeout=30)
+    key_args = [str(root / n) for n in ("ca.crt", "client.crt", "client.key", "invalid-client.key")]
+    for binary in a.key_match:
+        subprocess.run([str(binary.resolve())] + key_args, check=True, timeout=30)
+    for binary in a.key_match_opaque:
+        subprocess.run([str(binary.resolve())] + key_args + ["opaque"], check=True, timeout=30)
     modules = root / "empty-modules"
     modules.mkdir()
     empty_config = root / "empty.cnf"

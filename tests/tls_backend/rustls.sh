@@ -68,16 +68,30 @@ for variant in "${variants[@]}"; do
   # aws-lc-fips-sys builds the FIPS module as a shared library on macOS.
   fips_libs=$(find "$artifacts/target-$variant/release/build" -name 'libaws_lc_fips*' \
     -exec dirname {} \; | sort -u | paste -sd: -)
-  for program in policy client cert_buffers fips_cert_buffers handshake_timeout no_provider transport_io; do
+  wrap() { # NAME HOST-ARGS...
+    local name=$1
+    shift
     printf '#!/bin/sh\nDYLD_LIBRARY_PATH="%s" LD_LIBRARY_PATH="%s" exec "%s" %s "$@"\n' \
-      "$fips_libs" "$fips_libs" "$host" "$program" > "$artifacts/$program-$variant"
-    chmod +x "$artifacts/$program-$variant"
+      "$fips_libs" "$fips_libs" "$host" "$*" > "$artifacts/$name"
+    chmod +x "$artifacts/$name"
+  }
+  for program in policy client cert_buffers fips_cert_buffers handshake_timeout no_provider \
+      transport_io key_match; do
+    wrap "$program-$variant" "$program"
   done
+  if [[ $variant == ordinary ]]; then
+    # Provider keys without a public key, as with Windows CNG keys.
+    wrap key_match-opaque --opaque-keys key_match
+    wrap client-opaque --opaque-keys client
+    wrap no_provider-empty --empty-provider no_provider
+  fi
 done
 echo "PASS: one rustls-ffi copy in each host; none in static librdkafka"
 
 focused=(--no-provider "$artifacts/no_provider-ordinary" --policy "$artifacts/policy-ordinary"
-  --cert-buffers "$artifacts/cert_buffers-ordinary" --transport "$artifacts/transport_io-ordinary")
+  --cert-buffers "$artifacts/cert_buffers-ordinary" --transport "$artifacts/transport_io-ordinary"
+  --empty-provider "$artifacts/no_provider-empty" --key-match "$artifacts/key_match-ordinary"
+  --key-match-opaque "$artifacts/key_match-opaque")
 if ((fips)); then
   focused+=(--positive-policy "$artifacts/policy-fips" --fips-cert-buffers "$artifacts/fips_cert_buffers-fips")
 fi
@@ -87,7 +101,8 @@ if ((unit_only)); then
   echo 'PASS focused rustls tests; Kafka acceptance intentionally not requested (--unit-only)'
   exit 0
 fi
-"$venv/bin/python" "$src/tests/tls_backend/acceptance.py" --client "$artifacts/client-ordinary"
+"$venv/bin/python" "$src/tests/tls_backend/acceptance.py" --client "$artifacts/client-ordinary" \
+  --client "$artifacts/client-opaque"
 if ((fips)); then
   "$venv/bin/python" "$src/tests/tls_backend/acceptance.py" --fips --client "$artifacts/client-fips"
 fi

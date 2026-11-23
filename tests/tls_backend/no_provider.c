@@ -1,5 +1,6 @@
-/* rustls process-default build without an installed provider: TLS client
- * creation and private-key import must fail clearly, with no fallback. */
+/* rustls build without a usable provider (none installed, or an optional
+ * REASON such as an empty provider): TLS client creation and private-key
+ * import must fail clearly, with no fallback. */
 #include "rdkafka.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,9 +28,12 @@ int main(int argc, char **argv) {
         rd_kafka_t *rk;
         FILE *fp;
         size_t size;
+        const char *reason;
 
-        check(argc == 3, "Usage: no_provider CA.pem client.key");
-        conf = rd_kafka_conf_new();
+        check(argc == 3 || argc == 4,
+              "Usage: no_provider CA.pem client.key [REASON]");
+        reason = argc == 4 ? argv[3] : REASON;
+        conf   = rd_kafka_conf_new();
         set(conf, "log_level", "0");
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, error, sizeof(error));
         check(rk != NULL, error);
@@ -41,7 +45,7 @@ int main(int argc, char **argv) {
         set(conf, "ssl.ca.location", argv[1]);
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, error, sizeof(error));
         check(rk == NULL, "TLS client initialized without a provider");
-        check(strstr(error, REASON) != NULL, error);
+        check(strstr(error, reason) != NULL, error);
         rd_kafka_conf_destroy(conf);
 
         fp = fopen(argv[2], "rb");
@@ -54,11 +58,9 @@ int main(int argc, char **argv) {
                   conf, RD_KAFKA_CERT_PRIVATE_KEY, RD_KAFKA_CERT_ENC_PEM, key,
                   size, error, sizeof(error)) == RD_KAFKA_CONF_INVALID,
               "private key imported without a provider");
-        check(strstr(error, REASON) != NULL, error);
+        check(strstr(error, reason) != NULL, error);
         rd_kafka_conf_destroy(conf);
         memset(key, 0, sizeof(key));
-        puts(
-            "PASS: no process-default provider refuses TLS client and key "
-            "import");
+        printf("PASS: TLS client and key import refused: %s\n", reason);
         return 0;
 }

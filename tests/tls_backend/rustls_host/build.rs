@@ -8,6 +8,7 @@ const PROGRAMS: &[(&str, &str)] = &[
     ("fips_cert_buffers", "../fips_cert_buffers.c"),
     ("handshake_timeout", "../handshake_timeout.c"),
     ("no_provider", "../no_provider.c"),
+    ("key_match", "../key_match.c"),
 ];
 
 fn compile(name: &str, path: &Path, includes: &[PathBuf]) {
@@ -55,6 +56,8 @@ fn main() {
             println!("cargo:rustc-link-lib=framework={}", tokens.next().unwrap());
         } else if token.ends_with(".a") || token.ends_with(".lib") {
             let path = Path::new(token);
+            // Relink the host when librdkafka is rebuilt.
+            println!("cargo:rerun-if-changed={token}");
             let name = path.file_stem().unwrap().to_str().unwrap();
             let name = name.strip_prefix("lib").filter(|_| token.ends_with(".a")).unwrap_or(name);
             println!("cargo:rustc-link-search=native={}", path.parent().unwrap().display());

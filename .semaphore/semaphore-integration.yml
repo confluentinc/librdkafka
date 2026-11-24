@@ -32,22 +32,25 @@ global_job_config:
       value: '13'
 
 blocks:
-  - name: 'OSX arm64/m1'
-    dependencies: []
-    task:
-      agent:
-        machine:
-          type: s1-macos-15-arm64-8
-      env_vars:
-        - name: ARTIFACT_KEY
-          value: p-librdkafka__plat-osx__arch-arm64__lnk-all
-      epilogue:
-        commands:
-          - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
-      jobs:
-        - name: 'Build'
-          commands:
-            - packaging/macos/build-release-artifacts.sh
+# TODO: Temporarily disabled. The Semaphore s1-macos-15-arm64-8 agent pool
+# is unavailable because of AWS mac2.metal capacity issues. Re-enable once
+# the pool is back.
+#   - name: 'OSX arm64/m1'
+#     dependencies: []
+#     task:
+#       agent:
+#         machine:
+#           type: s1-macos-15-arm64-8
+#       env_vars:
+#         - name: ARTIFACT_KEY
+#           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
+#       epilogue:
+#         commands:
+#           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
+#       jobs:
+#         - name: 'Build'
+#           commands:
+#             - packaging/macos/build-release-artifacts.sh
 
 
   - name: 'OSX x64'

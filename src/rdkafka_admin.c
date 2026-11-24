@@ -2099,7 +2099,8 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
         if (rd_kafka_buf_ApiVersion(reply) >= 2) {
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(reply, &Throttle_Time);
-                rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+                rd_kafka_op_throttle_time(rkb, rk->rk_rep, reply,
+                                          Throttle_Time);
         }
 
         /* #topics */
@@ -2324,7 +2325,8 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
         if (rd_kafka_buf_ApiVersion(reply) >= 1) {
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(reply, &Throttle_Time);
-                rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+                rd_kafka_op_throttle_time(rkb, rk->rk_rep, reply,
+                                          Throttle_Time);
         }
 
         /* #topics */
@@ -2599,7 +2601,7 @@ rd_kafka_CreatePartitionsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, reply, Throttle_Time);
 
         /* #topics */
         rd_kafka_buf_read_arraycnt(reply, &topic_cnt, RD_KAFKAP_PARTITIONS_MAX);
@@ -3204,7 +3206,7 @@ rd_kafka_AlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, reply, Throttle_Time);
 
         rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
@@ -3401,7 +3403,7 @@ rd_kafka_IncrementalAlterConfigsResponse_parse(rd_kafka_op_t *rko_req,
         int32_t Throttle_Time;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, reply, Throttle_Time);
 
         rd_kafka_buf_read_arraycnt(reply, &res_cnt, RD_KAFKAP_CONFIGS_MAX);
 
@@ -3677,7 +3679,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_ConfigEntry_t *entry     = NULL;
 
         rd_kafka_buf_read_i32(reply, &Throttle_Time);
-        rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
+        rd_kafka_op_throttle_time(rkb, rk->rk_rep, reply, Throttle_Time);
 
         /* #resources */
         rd_kafka_buf_read_i32(reply, &res_cnt);

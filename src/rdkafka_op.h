@@ -1005,6 +1005,7 @@ rd_kafka_op_t *rd_kafka_op_new_ctrl_msg(rd_kafka_toppar_t *rktp,
 
 void rd_kafka_op_throttle_time(struct rd_kafka_broker_s *rkb,
                                rd_kafka_q_t *rkq,
+                               const struct rd_kafka_buf_s *rkbuf,
                                int throttle_time);
 
 

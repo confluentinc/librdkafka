@@ -1351,6 +1351,7 @@ rd_kafka_mock_cluster_reassign_partitions(rd_kafka_mock_cluster_t *mcluster) {
 static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
                                            const char *reason) {
         rd_kafka_buf_t *rkbuf;
+        rd_kafka_mock_conn_throttle_t *thr;
 
         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
                      "Broker %" PRId32 ": Connection from %s closed: %s",
@@ -1364,6 +1365,13 @@ static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_timer_stop(&mconn->broker->cluster->timers, &mconn->write_tmr,
                             rd_true);
+        rd_kafka_timer_stop(&mconn->broker->cluster->timers, &mconn->mute_tmr,
+                            rd_true);
+
+        while ((thr = TAILQ_FIRST(&mconn->req_throttles))) {
+                TAILQ_REMOVE(&mconn->req_throttles, thr, link);
+                rd_free(thr);
+        }
 
         while ((rkbuf = TAILQ_FIRST(&mconn->outbufs.rkbq_bufs))) {
                 rd_kafka_bufq_deq(&mconn->outbufs, rkbuf);
@@ -1380,9 +1388,123 @@ static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
         rd_free(mconn);
 }
 
+/**
+ * @brief Remember the throttle time of the request \p CorrId handled on
+ *        \p mconn, until its response is sent.
+ */
+static void
+rd_kafka_mock_connection_request_throttle_add(rd_kafka_mock_connection_t *mconn,
+                                              int32_t CorrId,
+                                              int throttle_ms) {
+        rd_kafka_mock_conn_throttle_t *thr = rd_calloc(1, sizeof(*thr));
+
+        thr->CorrId      = CorrId;
+        thr->throttle_ms = throttle_ms;
+        TAILQ_INSERT_TAIL(&mconn->req_throttles, thr, link);
+}
+
+
+/**
+ * @returns the throttle time of the request \p CorrId handled on \p mconn,
+ *          or 0 if it was not throttled. The entry is removed if
+ *          \p remove, which is for when the response is sent.
+ */
+static int
+rd_kafka_mock_connection_request_throttle(rd_kafka_mock_connection_t *mconn,
+                                          int32_t CorrId,
+                                          rd_bool_t remove) {
+        rd_kafka_mock_conn_throttle_t *thr;
+        int throttle_ms;
+
+        TAILQ_FOREACH(thr, &mconn->req_throttles, link) {
+                if (thr->CorrId == CorrId)
+                        break;
+        }
+
+        if (!thr)
+                return 0;
+
+        throttle_ms = thr->throttle_ms;
+        if (remove) {
+                TAILQ_REMOVE(&mconn->req_throttles, thr, link);
+                rd_free(thr);
+        }
+
+        return throttle_ms;
+}
+
+
+/**
+ * @brief Enable or disable POLLIN for \p mconn depending on whether it is
+ *        blocked by a request handler or muted by a throttle time.
+ */
+static void
+rd_kafka_mock_connection_update_pollin(rd_kafka_mock_connection_t *mconn) {
+        rd_kafka_mock_cluster_io_set_event(
+            mconn->broker->cluster, mconn->transport->rktrans_s,
+            !mconn->blocked && !mconn->throttled, POLLIN);
+}
+
+
+/**
+ * @brief Timer callback to resume reading requests from a connection
+ *        after its throttle time has passed.
+ */
+static void rd_kafka_mock_connection_unthrottle_tmr_cb(rd_kafka_timers_t *rkts,
+                                                       void *arg) {
+        rd_kafka_mock_connection_t *mconn = arg;
+
+        mconn->throttled = rd_false;
+        rd_kafka_mock_connection_update_pollin(mconn);
+}
+
+
+/**
+ * @brief Mute \p mconn for \p throttle_ms, the throttle time of the response
+ *        \p resp: stop reading requests from it, until it has passed.
+ *
+ *        Like an Apache Kafka broker the response is sent right away and
+ *        the channel is muted from then on, for every request version.
+ *        Requests that the client pipelines in the meantime wait unread in
+ *        the socket buffer, which is why their responses arrive late.
+ *
+ *        The throttle time starts when the response is ready to be sent,
+ *        that is after any RTT/delay of the response.
+ *
+ * @locality mcluster thread
+ */
+static void rd_kafka_mock_connection_throttle(rd_kafka_mock_connection_t *mconn,
+                                              const rd_kafka_buf_t *resp,
+                                              int throttle_ms) {
+        rd_ts_t now = rd_clock();
+        rd_ts_t until;
+
+        /* The response is ready to be sent at rkbuf_ts_sent, or at
+         * rkbuf_ts_retry if it is delayed, as for a Fetch that waits for
+         * data, see rd_kafka_mock_connection_write_out() for the
+         * broker RTT. */
+        until = RD_MAX(resp->rkbuf_ts_sent, resp->rkbuf_ts_retry) +
+                mconn->broker->rtt + (rd_ts_t)throttle_ms * 1000;
+
+        /* Never shorten a throttle time that is already in effect. */
+        if (mconn->throttled && until <= mconn->ts_throttle_until)
+                return;
+
+        mconn->throttled         = rd_true;
+        mconn->ts_throttle_until = until;
+        rd_kafka_mock_connection_update_pollin(mconn);
+
+        rd_kafka_timer_start_oneshot(
+            &mconn->broker->cluster->timers, &mconn->mute_tmr, rd_true,
+            until > now ? until - now : 1,
+            rd_kafka_mock_connection_unthrottle_tmr_cb, mconn);
+}
+
+
 void rd_kafka_mock_connection_send_response0(rd_kafka_mock_connection_t *mconn,
                                              rd_kafka_buf_t *resp,
                                              rd_bool_t tags_written) {
+        int throttle_ms;
 
         if (!tags_written && (resp->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
                 /* Empty struct tags */
@@ -1406,6 +1528,13 @@ void rd_kafka_mock_connection_send_response0(rd_kafka_mock_connection_t *mconn,
 
         /* Set up a buffer reader for sending the buffer. */
         rd_slice_init_full(&resp->rkbuf_reader, &resp->rkbuf_buf);
+
+        /* Throttled request: mute the connection once the response
+         * has been sent. */
+        throttle_ms = rd_kafka_mock_connection_request_throttle(
+            mconn, resp->rkbuf_reqhdr.CorrId, rd_true /*remove*/);
+        if (throttle_ms > 0)
+                rd_kafka_mock_connection_throttle(mconn, resp, throttle_ms);
 
         rd_kafka_bufq_enq(&mconn->outbufs, resp);
 
@@ -1579,6 +1708,48 @@ rd_kafka_buf_t *rd_kafka_mock_buf_new_response(const rd_kafka_buf_t *request) {
 }
 
 
+/**
+ * @brief Write the ThrottleTimeMs response field: the throttle time injected
+ *        for the request, or 0. Handlers call this where the field is in the
+ *        response of the request's ApiVersion.
+ *
+ * @remark The connection is muted when the response is sent, see
+ *         rd_kafka_mock_connection_send_response0().
+ */
+void rd_kafka_mock_buf_write_ThrottleTime(rd_kafka_mock_connection_t *mconn,
+                                          rd_kafka_buf_t *resp) {
+        rd_kafka_buf_write_i32(
+            resp, rd_kafka_mock_connection_request_throttle(
+                      mconn, resp->rkbuf_reqhdr.CorrId, rd_false /*keep*/));
+}
+
+
+/**
+ * @brief Remove and return the throttle time pushed for the next request of
+ *        type \p ApiKey to \p mrkb, or 0 if there is none.
+ *
+ * @locks mcluster->lock must be held
+ */
+static int rd_kafka_mock_broker_next_throttle(rd_kafka_mock_broker_t *mrkb,
+                                              int16_t ApiKey) {
+        rd_kafka_mock_throttle_t *thr;
+        int throttle_ms;
+
+        TAILQ_FOREACH(thr, &mrkb->throttles, link) {
+                if (thr->ApiKey == ApiKey)
+                        break;
+        }
+
+        if (!thr)
+                return 0;
+
+        throttle_ms = thr->throttle_ms;
+        TAILQ_REMOVE(&mrkb->throttles, thr, link);
+        rd_free(thr);
+
+        return throttle_ms;
+}
+
 
 /**
  * @brief Parse protocol request.
@@ -1590,6 +1761,7 @@ rd_kafka_mock_connection_parse_request(rd_kafka_mock_connection_t *mconn,
                                        rd_kafka_buf_t *rkbuf) {
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_t *rk                    = mcluster->rk;
+        int throttle_ms;
 
         if (rkbuf->rkbuf_reqhdr.ApiKey < 0 ||
             rkbuf->rkbuf_reqhdr.ApiKey >= RD_KAFKAP__NUM ||
@@ -1631,7 +1803,18 @@ rd_kafka_mock_connection_parse_request(rd_kafka_mock_connection_t *mconn,
                                 mconn->broker->id, rkbuf->rkbuf_reqhdr.ApiKey,
                                 rd_clock()));
         }
+
+        /* Each request consumes at most one throttle time, no matter how
+         * many times its handler pops the error stack. */
+        throttle_ms = rd_kafka_mock_broker_next_throttle(
+            mconn->broker, rkbuf->rkbuf_reqhdr.ApiKey);
         mtx_unlock(&mcluster->lock);
+
+        /* Kept until the response is sent, which can be after the next
+         * request has been read. */
+        if (throttle_ms > 0)
+                rd_kafka_mock_connection_request_throttle_add(
+                    mconn, rkbuf->rkbuf_reqhdr.CorrId, throttle_ms);
 
         rd_kafka_dbg(rk, MOCK, "MOCK",
                      "Broker %" PRId32 ": Received %sRequestV%hd from %s",
@@ -1763,6 +1946,12 @@ static void rd_kafka_mock_connection_io(rd_kafka_mock_cluster_t *mcluster,
                                                                "Parse error");
                                 return;
                         }
+
+                        /* The request just handled throttled the connection:
+                         * leave any pipelined requests unread until the
+                         * mute timer fires, like a broker does. */
+                        if (mconn->throttled)
+                                break;
                 }
         }
 
@@ -1791,9 +1980,8 @@ static void rd_kafka_mock_connection_io(rd_kafka_mock_cluster_t *mcluster,
  */
 void rd_kafka_mock_connection_set_blocking(rd_kafka_mock_connection_t *mconn,
                                            rd_bool_t blocking) {
-        rd_kafka_mock_cluster_io_set_event(mconn->broker->cluster,
-                                           mconn->transport->rktrans_s,
-                                           !blocking, POLLIN);
+        mconn->blocked = blocking;
+        rd_kafka_mock_connection_update_pollin(mconn);
 }
 
 
@@ -1828,6 +2016,7 @@ rd_kafka_mock_connection_new(rd_kafka_mock_broker_t *mrkb,
         mconn->transport = rktrans;
         mconn->peer      = *peer;
         rd_kafka_bufq_init(&mconn->outbufs);
+        TAILQ_INIT(&mconn->req_throttles);
 
         TAILQ_INSERT_TAIL(&mrkb->connections, mconn, link);
 
@@ -1985,6 +2174,7 @@ rd_kafka_mock_error_stack_destroy(rd_kafka_mock_error_stack_t *errstack) {
 
 static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
         rd_kafka_mock_error_stack_t *errstack;
+        rd_kafka_mock_throttle_t *thr;
 
         rd_kafka_mock_broker_close_all(mrkb, "Destroying broker");
 
@@ -1998,6 +2188,11 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
         while ((errstack = TAILQ_FIRST(&mrkb->errstacks))) {
                 TAILQ_REMOVE(&mrkb->errstacks, errstack, link);
                 rd_kafka_mock_error_stack_destroy(errstack);
+        }
+
+        while ((thr = TAILQ_FIRST(&mrkb->throttles))) {
+                TAILQ_REMOVE(&mrkb->throttles, thr, link);
+                rd_free(thr);
         }
 
         if (mrkb->rack)
@@ -2182,6 +2377,7 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster,
 
         TAILQ_INIT(&mrkb->connections);
         TAILQ_INIT(&mrkb->errstacks);
+        TAILQ_INIT(&mrkb->throttles);
 
         TAILQ_INSERT_TAIL(&mcluster->brokers, mrkb, link);
         mcluster->broker_cnt++;
@@ -2545,6 +2741,60 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
                     ((rd_ts_t)va_arg(ap, int)) * 1000;
         }
         va_end(ap);
+
+        mtx_unlock(&mcluster->lock);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
+                                           int32_t broker_id,
+                                           int16_t ApiKey,
+                                           size_t cnt,
+                                           ...) {
+        rd_kafka_mock_broker_t *mrkb;
+        rd_kafka_mock_throttle_t *thr;
+        va_list ap;
+        int *throttles;
+        size_t i;
+
+        /* The request type must be one the mock cluster handles, else
+         * the throttle times would never be consumed. */
+        if (!mcluster || ApiKey < 0 || ApiKey >= RD_KAFKAP__NUM ||
+            !mcluster->api_handlers[ApiKey].cb)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        if (cnt == 0)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        throttles = rd_alloca(sizeof(*throttles) * cnt);
+        va_start(ap, cnt);
+        for (i = 0; i < cnt; i++) {
+                throttles[i] = va_arg(ap, int);
+                if (throttles[i] < 0) {
+                        va_end(ap);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+        }
+        va_end(ap);
+
+        mtx_lock(&mcluster->lock);
+
+        if (!(mrkb = rd_kafka_mock_broker_find(mcluster, broker_id))) {
+                mtx_unlock(&mcluster->lock);
+                return RD_KAFKA_RESP_ERR__UNKNOWN_BROKER;
+        }
+
+        /* A throttle time of 0 is stored as well since it consumes the
+         * request it applies to, it must not slide to the next one. */
+        for (i = 0; i < cnt; i++) {
+                thr              = rd_calloc(1, sizeof(*thr));
+                thr->ApiKey      = ApiKey;
+                thr->throttle_ms = throttles[i];
+                TAILQ_INSERT_TAIL(&mrkb->throttles, thr, link);
+        }
 
         mtx_unlock(&mcluster->lock);
 

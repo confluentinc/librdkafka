@@ -63,6 +63,29 @@ typedef TAILQ_HEAD(rd_kafka_mock_error_stack_head_s,
                    rd_kafka_mock_error_stack_s)
     rd_kafka_mock_error_stack_head_t;
 
+/**
+ * @struct A throttle time to return to the client for the next request of
+ *         type ApiKey handled by the broker, see
+ *         rd_kafka_mock_broker_push_request_throttle().
+ */
+typedef struct rd_kafka_mock_throttle_s {
+        TAILQ_ENTRY(rd_kafka_mock_throttle_s) link;
+        int16_t ApiKey;  /**< Request type */
+        int throttle_ms; /**< Throttle time in milliseconds, 0 means the
+                          *   request is not throttled (but consumes
+                          *   this entry). */
+} rd_kafka_mock_throttle_t;
+
+/**
+ * @struct The throttle time of a request that is being handled on a
+ *         connection, until its response has been sent.
+ */
+typedef struct rd_kafka_mock_conn_throttle_s {
+        TAILQ_ENTRY(rd_kafka_mock_conn_throttle_s) link;
+        int32_t CorrId;  /**< Correlation id of the request */
+        int throttle_ms; /**< Throttle time in milliseconds, > 0 */
+} rd_kafka_mock_conn_throttle_t;
+
 
 /**
  * @struct Consumer group protocol name and metadata.
@@ -407,6 +430,18 @@ typedef struct rd_kafka_mock_connection_s {
         struct sockaddr_in peer;         /**< Peer address */
         struct rd_kafka_mock_broker_s *broker;
         rd_kafka_timer_t write_tmr; /**< Socket write delay timer */
+        rd_bool_t blocked;          /**< Blocked by a request handler
+                                     *   (see set_blocking()) */
+        rd_bool_t throttled;        /**< Muted by a throttle time: requests
+                                     *   are not read until mute_tmr fires.
+                                     *   Independent of .blocked. */
+        rd_ts_t ts_throttle_until;  /**< End of the throttle time */
+        rd_kafka_timer_t mute_tmr;  /**< Throttle time (mute) timer */
+        /**< Throttle times of the throttled requests whose response has not
+         *   been sent yet, only requests with a throttle time are here.
+         *   Keyed by CorrId since a response can be sent after the next
+         *   request has been read. */
+        TAILQ_HEAD(, rd_kafka_mock_conn_throttle_s) req_throttles;
 } rd_kafka_mock_connection_t;
 
 
@@ -437,6 +472,11 @@ typedef struct rd_kafka_mock_broker_s {
         /**< Per-protocol request error stack.
          *   @locks mcluster->lock */
         rd_kafka_mock_error_stack_head_t errstacks;
+
+        /**< Throttle times to return for the next requests, in order.
+         *   An entry is consumed by the next request of its ApiKey.
+         *   @locks mcluster->lock */
+        TAILQ_HEAD(, rd_kafka_mock_throttle_s) throttles;
 
         struct rd_kafka_mock_cluster_s *cluster;
 } rd_kafka_mock_broker_t;
@@ -721,6 +761,8 @@ struct rd_kafka_mock_cluster_s {
 
 
 rd_kafka_buf_t *rd_kafka_mock_buf_new_response(const rd_kafka_buf_t *request);
+void rd_kafka_mock_buf_write_ThrottleTime(rd_kafka_mock_connection_t *mconn,
+                                          rd_kafka_buf_t *resp);
 
 #define rd_kafka_mock_connection_send_response(mconn, resp)                    \
         rd_kafka_mock_connection_send_response0(mconn, resp, rd_false)

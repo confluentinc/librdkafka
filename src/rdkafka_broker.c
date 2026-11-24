@@ -2106,6 +2106,14 @@ static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
             (req->rkbuf_flags & RD_KAFKA_BUF_FLAGS_RESP_COPY_MASK);
         rkbuf->rkbuf_ts_sent = req->rkbuf_ts_sent; /* copy rtt */
 
+        /* Remember which host this response came from: the nodename epoch of
+         * the connection it was received on. The broker's nodename, and its
+         * epoch, may change before the response is handled, in which case
+         * its throttle time must not be applied, see
+         * rd_kafka_broker_throttle().
+         * rkb_connect_epoch is only written by the broker thread. */
+        rkbuf->rkbuf_connect_epoch = rkb->rkb_connect_epoch;
+
         /* Set up response reader slice starting past the response header */
         rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,
                       RD_KAFKAP_RESHDR_SIZE,
@@ -3426,6 +3434,9 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_strlcpy(rkb->rkb_nodename, rko->rko_u.node.nodename,
                                    sizeof(rkb->rkb_nodename));
                         rkb->rkb_nodename_epoch++;
+                        /* The throttle time was set by the previous host,
+                         * the new one has not throttled this client. */
+                        rd_atomic64_set(&rkb->rkb_ts_throttle_until, 0);
                         updated = rd_true;
                 }
 
@@ -5440,6 +5451,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
 
         rd_atomic64_init(&rkb->rkb_c.ts_send, 0);
         rd_atomic64_init(&rkb->rkb_c.ts_recv, 0);
+        rd_atomic64_init(&rkb->rkb_ts_throttle_until, 0);
 
         /* ApiVersion fallback interval */
         if (rkb->rkb_rk->rk_conf.api_version_request) {
@@ -5662,6 +5674,10 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
                 rd_strlcpy(rkb->rkb_nodename, nodename,
                            sizeof(rkb->rkb_nodename));
                 rkb->rkb_nodename_epoch++;
+                /* The throttle time was set by the previous host,
+                 * the new one has not throttled this client.
+                 * Reset with the lock held, see rd_kafka_broker_throttle(). */
+                rd_atomic64_set(&rkb->rkb_ts_throttle_until, 0);
                 changed = rd_true;
         }
         rd_kafka_broker_unlock(rkb);
@@ -6780,6 +6796,69 @@ void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
 }
 
 /**
+ * @brief The broker throttled this client for \p throttle_time_ms, as reported
+ *        in the response to a request of type \p ApiKey and version
+ *        \p ApiVersion (KIP-219): record the time until which requests are
+ *        to be held back.
+ *
+ *        Ignored if the throttle time is not positive or the version is not
+ *        to be honored, see rd_kafka_ApiVersion_honors_throttle().
+ *        The time only moves forward, a shorter throttle time does not
+ *        shorten the one in effect.
+ *
+ *        Also ignored if the nodename of the broker has changed since the
+ *        response was received: the host that throttled this client is not
+ *        the one of the broker any more.
+ *
+ * @remark Counted from when the response is handled, not received: the
+ *         client may hold back slightly longer than the broker, never shorter.
+ *
+ * @locality any thread
+ * @locks rd_kafka_broker_lock() is acquired
+ */
+void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
+                              int16_t ApiKey,
+                              int16_t ApiVersion,
+                              int connect_epoch,
+                              int throttle_time_ms) {
+        rd_ts_t until;
+        rd_bool_t stale;
+
+        if (throttle_time_ms <= 0 ||
+            !rd_kafka_ApiVersion_honors_throttle(ApiKey, ApiVersion))
+                return;
+
+        until = rd_clock() + (rd_ts_t)throttle_time_ms * 1000;
+
+        /* The deadline is written with the broker lock held, here and when
+         * the nodename changes. A throttle time from the previous host is
+         * thus either recorded before the nodename change, and cleared by its
+         * reset, or ignored. Both the main thread and the broker thread can
+         * handle responses, the lock also serializes them so that a shorter
+         * throttle time never overwrites a longer one. The readers don't take
+         * the lock. */
+        rd_kafka_broker_lock(rkb);
+        stale = connect_epoch != rkb->rkb_nodename_epoch;
+        if (!stale &&
+            (rd_ts_t)rd_atomic64_get(&rkb->rkb_ts_throttle_until) < until)
+                rd_atomic64_set(&rkb->rkb_ts_throttle_until, until);
+        rd_kafka_broker_unlock(rkb);
+
+        if (stale) {
+                rd_rkb_dbg(rkb, BROKER, "THROTTLE",
+                           "Ignoring the throttle time of %dms by "
+                           "%sResponse v%hd: received from the previous host",
+                           throttle_time_ms, rd_kafka_ApiKey2str(ApiKey),
+                           ApiVersion);
+                return;
+        }
+
+        rd_rkb_dbg(rkb, BROKER, "THROTTLE",
+                   "Throttled for %dms by %sResponse v%hd", throttle_time_ms,
+                   rd_kafka_ApiKey2str(ApiKey), ApiVersion);
+}
+
+/**
  * @brief Unittest for reconnect.backoff.ms
  */
 static int rd_ut_reconnect_backoff(void) {
@@ -6973,6 +7052,180 @@ static int rd_ut_nodename_to_hostname(void) {
 }
 
 /**
+ * @brief The throttle deadline set by rd_kafka_broker_throttle():
+ *        what it ignores and that it only moves forward.
+ */
+static int rd_ut_broker_throttle(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        char errstr[256];
+        rd_ts_t before, after, until, prev;
+        int epoch;
+
+        conf = rd_kafka_conf_new();
+        rk   = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rk, "failed to create client: %s", errstr);
+
+        /* A logical broker has no connection to establish. */
+        rkb = rd_kafka_broker_add_logical(rk, "ut_throttle");
+
+        rd_kafka_broker_lock(rkb);
+        epoch = rkb->rkb_nodename_epoch;
+        rd_kafka_broker_unlock(rkb);
+
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
+                     "a new broker has not been throttled");
+
+        /* Not a throttle time, or a throttle time that is not honored. */
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 6, epoch, 0);
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 6, epoch, -10);
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 5, epoch, 1000);
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Metadata, 5, epoch, 1000);
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_DescribeAcls, 0, epoch, 1000);
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
+                     "expected no throttle, got %" PRId64,
+                     rd_kafka_broker_throttle_until(rkb));
+
+        /* The deadline is the time of the call plus the throttle time. */
+        before = rd_clock();
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 6, epoch, 1000);
+        after = rd_clock();
+        until = rd_kafka_broker_throttle_until(rkb);
+        RD_UT_ASSERT_RANGE(until, before + 1000 * 1000, after + 1000 * 1000,
+                           "%" PRId64);
+
+        /* A shorter throttle time, from any request type, does not shorten
+         * the throttle time in effect. */
+        prev = until;
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Metadata, 6, epoch, 10);
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Fetch, 8, epoch, 500);
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == prev,
+                     "a shorter throttle time must not move the deadline: "
+                     "was %" PRId64 ", now %" PRId64,
+                     prev, rd_kafka_broker_throttle_until(rkb));
+
+        /* A longer one extends it, from any request type, including those
+         * that are honored at every version. */
+        before = rd_clock();
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_ElectLeaders, 0, epoch, 20000);
+        until = rd_kafka_broker_throttle_until(rkb);
+        RD_UT_ASSERT(until >= before + 20000 * 1000,
+                     "expected a deadline of at least %" PRId64
+                     ", got %" PRId64,
+                     before + 20000 * 1000, until);
+
+        rd_kafka_broker_destroy(rkb);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
+ * @returns the nodename epoch of \p rkb.
+ */
+static int rd_ut_nodename_epoch(rd_kafka_broker_t *rkb) {
+        int epoch;
+
+        rd_kafka_broker_lock(rkb);
+        epoch = rkb->rkb_nodename_epoch;
+        rd_kafka_broker_unlock(rkb);
+
+        return epoch;
+}
+
+
+/**
+ * @brief A new nodename of the broker resets its throttle deadline, as when
+ *        the broker id moves to another host: that host has not throttled
+ *        this client. The same nodename does not.
+ *
+ *        The throttle time of a response received before the nodename changed,
+ *        from the previous host, is ignored.
+ */
+static int rd_ut_throttle_nodename_update(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_op_t *rko;
+        char errstr[256];
+        char nodename[RD_KAFKA_NODENAME_SIZE];
+        rd_ts_t until;
+        int epoch, prev_epoch;
+
+        conf = rd_kafka_conf_new();
+        rk   = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rk, "failed to create client: %s", errstr);
+
+        /* A logical broker has no connection to establish. */
+        rkb = rd_kafka_broker_add_logical(rk, "ut_throttle");
+
+        rd_kafka_broker_lock(rkb);
+        rd_strlcpy(nodename, rkb->rkb_nodename, sizeof(nodename));
+        epoch = rkb->rkb_nodename_epoch;
+        rd_kafka_broker_unlock(rkb);
+
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, epoch, 60000);
+        until = rd_kafka_broker_throttle_until(rkb);
+        RD_UT_ASSERT(until > rd_clock(), "expected a throttle time");
+
+        /* Same nodename */
+        rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
+        rd_strlcpy(rko->rko_u.node.nodename, nodename,
+                   sizeof(rko->rko_u.node.nodename));
+        rd_kafka_op_err_destroy(rd_kafka_op_req(rkb->rkb_ops, rko, -1));
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == until,
+                     "the same nodename must not reset the deadline");
+
+        /* New nodename */
+        rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
+        rd_strlcpy(rko->rko_u.node.nodename, "ut-other-host:9092",
+                   sizeof(rko->rko_u.node.nodename));
+        rd_kafka_op_err_destroy(rd_kafka_op_req(rkb->rkb_ops, rko, -1));
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
+                     "a new nodename must reset the deadline, got %" PRId64,
+                     rd_kafka_broker_throttle_until(rkb));
+
+        /* A response received before the nodename changed, from the previous
+         * host, does not throttle the broker. */
+        prev_epoch = epoch;
+        epoch      = rd_ut_nodename_epoch(rkb);
+        RD_UT_ASSERT(epoch != prev_epoch, "expected a new nodename epoch");
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, prev_epoch, 60000);
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
+                     "a throttle time from the previous host must be ignored, "
+                     "got %" PRId64,
+                     rd_kafka_broker_throttle_until(rkb));
+
+        /* One from the current host does. */
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, epoch, 60000);
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) > rd_clock(),
+                     "expected a throttle time from the current host");
+
+        /* The same when the nodename of a logical broker is changed with
+         * rd_kafka_broker_set_nodename(). */
+        rd_kafka_broker_set_nodename(rkb, NULL);
+        prev_epoch = epoch;
+        epoch      = rd_ut_nodename_epoch(rkb);
+        RD_UT_ASSERT(epoch != prev_epoch, "expected a new nodename epoch");
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
+                     "a new nodename must reset the deadline, got %" PRId64,
+                     rd_kafka_broker_throttle_until(rkb));
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, prev_epoch, 60000);
+        RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
+                     "a throttle time from the previous host must be ignored, "
+                     "got %" PRId64,
+                     rd_kafka_broker_throttle_until(rkb));
+
+        rd_kafka_broker_destroy(rkb);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
  * @name Unit tests
  * @{
  *
@@ -6984,6 +7237,8 @@ int unittest_broker(void) {
         fails += rd_ut_ApiVersion_at_least();
         fails += rd_ut_mk_nodename();
         fails += rd_ut_nodename_to_hostname();
+        fails += rd_ut_broker_throttle();
+        fails += rd_ut_throttle_nodename_update();
 
         return fails;
 }

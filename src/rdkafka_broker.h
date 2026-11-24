@@ -191,7 +191,8 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                               * the KIP-219 boundary of that
                                               * request type. Only moves
                                               * forward, reset when the nodename
-                                              * changes. */
+                                              * changes. Written with rkb_lock
+                                              * held, read without it. */
 
         rd_kafka_broker_state_t rkb_state; /**< Current broker state */
 
@@ -869,6 +870,7 @@ void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
 void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
                               int16_t ApiKey,
                               int16_t ApiVersion,
+                              int connect_epoch,
                               int throttle_time_ms);
 
 /**

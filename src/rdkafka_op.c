@@ -1024,7 +1024,8 @@ rd_kafka_op_t *rd_kafka_op_new_fetch_msg(rd_kafka_msg_t **rkmp,
  *        - enqueue ERR__THROTTLE op, if desired.
  *
  * @param rkbuf The response, to know the type and version of the request it
- *              is the response of.
+ *              is the response of, and the nodename epoch of the connection
+ *              it was received on.
  */
 void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
                                rd_kafka_q_t *rkq,
@@ -1039,6 +1040,7 @@ void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
 
                 rd_kafka_broker_throttle(rkb, rkbuf->rkbuf_reqhdr.ApiKey,
                                          rkbuf->rkbuf_reqhdr.ApiVersion,
+                                         rkbuf->rkbuf_connect_epoch,
                                          throttle_time);
         }
 

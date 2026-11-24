@@ -235,7 +235,7 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
  * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          \c RD_KAFKA_RESP_ERR__UNKNOWN_BROKER if there is no such broker,
  *          or \c RD_KAFKA_RESP_ERR__INVALID_ARG if \p ApiKey is not handled
- *          by the mock cluster or a throttle time is negative.
+ *          by the mock cluster, \p cnt is 0 or a throttle time is negative.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,

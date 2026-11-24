@@ -1479,10 +1479,12 @@ static void rd_kafka_mock_connection_throttle(rd_kafka_mock_connection_t *mconn,
         rd_ts_t now = rd_clock();
         rd_ts_t until;
 
-        /* rkbuf_ts_sent is the time the response is ready to be sent,
-         * see rd_kafka_mock_connection_write_out() for the broker RTT. */
-        until = resp->rkbuf_ts_sent + mconn->broker->rtt +
-                (rd_ts_t)throttle_ms * 1000;
+        /* The response is ready to be sent at rkbuf_ts_sent, or at
+         * rkbuf_ts_retry if it is delayed, as for a Fetch that waits for
+         * data, see rd_kafka_mock_connection_write_out() for the
+         * broker RTT. */
+        until = RD_MAX(resp->rkbuf_ts_sent, resp->rkbuf_ts_retry) +
+                mconn->broker->rtt + (rd_ts_t)throttle_ms * 1000;
 
         /* Never shorten a throttle time that is already in effect. */
         if (mconn->throttled && until <= mconn->ts_throttle_until)
@@ -2765,7 +2767,7 @@ rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         if (cnt == 0)
-                return RD_KAFKA_RESP_ERR_NO_ERROR;
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         throttles = rd_alloca(sizeof(*throttles) * cnt);
         va_start(ap, cnt);

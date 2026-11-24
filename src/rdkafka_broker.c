@@ -5681,6 +5681,10 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
         if (!changed)
                 return;
 
+        /* The throttle time was set by the previous host,
+         * the new one has not throttled this client. */
+        rd_atomic64_set(&rkb->rkb_ts_throttle_until, 0);
+
         /* Trigger a disconnect & reconnect */
         rd_kafka_broker_schedule_connection(rkb);
 }

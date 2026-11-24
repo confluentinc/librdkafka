@@ -70,6 +70,15 @@ static struct {
         int sent_cnt;
         int reqtmout_cnt; /**< Requests that timed out */
         int bump_cnt;     /**< Epoch bumps of the idempotent producer */
+
+        /** The InitProducerIdResponses that throttled the client */
+        int init_pid_throttle_cnt;
+        int init_pid_throttle_ms;     /**< the last throttle time */
+        int init_pid_throttle_broker; /**< and the id of its broker */
+        /** The InitProducerIdRequests that timed out */
+        int init_pid_tmout_cnt;
+        int init_pid_tmout_ms;     /**< after how long, the last one */
+        int init_pid_tmout_broker; /**< and the id of its broker */
 } events;
 
 /** Result of a produced message */
@@ -88,29 +97,51 @@ static void events_reset(void) {
         mtx_unlock(&events_lock);
 }
 
+/**
+ * @returns the id of the broker in the name that precedes the message at
+ *          \p msg in \p buf, "host:port/id: " or "TxnCoordinator/id: ".
+ */
+static int broker_id_before(const char *buf, const char *msg) {
+        const char *slash = NULL, *q;
+
+        for (q = buf; q < msg; q++)
+                if (*q == '/')
+                        slash = q;
+        return slash ? atoi(slash + 1) : -1;
+}
+
 static void events_log_cb(const rd_kafka_t *rk,
                           int level,
                           const char *fac,
                           const char *buf) {
-        const char *sent = "Sent ProduceRequest (v";
-        const char *p;
+        const char *sent      = "Sent ProduceRequest (v";
+        const char *throttled = "Throttled for ";
+        const char *tmout     = "Timed out InitProducerIdRequest";
+        const char *after     = "(after ";
+        const char *p, *q;
 
         mtx_lock(&events_lock);
         if (!strcmp(fac, "REQTMOUT")) {
                 events.reqtmout_cnt++;
+                if ((p = strstr(buf, tmout))) {
+                        q = strstr(p, after);
+
+                        events.init_pid_tmout_cnt++;
+                        events.init_pid_tmout_broker = broker_id_before(buf, p);
+                        events.init_pid_tmout_ms =
+                            q ? atoi(q + strlen(after)) : -1;
+                }
+        } else if (!strcmp(fac, "THROTTLE") && (p = strstr(buf, throttled)) &&
+                   strstr(p, "by InitProducerIdResponse")) {
+                events.init_pid_throttle_cnt++;
+                events.init_pid_throttle_broker = broker_id_before(buf, p);
+                events.init_pid_throttle_ms     = atoi(p + strlen(throttled));
         } else if (!strcmp(fac, "DRAIN") && strstr(buf, "bumped epoch")) {
                 events.bump_cnt++;
         } else if ((p = strstr(buf, sent)) && events.sent_cnt < EVENTS_MAX) {
-                const char *slash = NULL, *q;
-
-                /* The broker name, "host:port/id: ", precedes the message */
-                for (q = buf; q < p; q++)
-                        if (*q == '/')
-                                slash = q;
-                events.sent_broker[events.sent_cnt] =
-                    slash ? atoi(slash + 1) : -1;
-                events.sent_ver[events.sent_cnt] = atoi(p + strlen(sent));
-                events.sent_ts[events.sent_cnt]  = test_clock();
+                events.sent_broker[events.sent_cnt] = broker_id_before(buf, p);
+                events.sent_ver[events.sent_cnt]    = atoi(p + strlen(sent));
+                events.sent_ts[events.sent_cnt]     = test_clock();
                 events.sent_cnt++;
         }
         mtx_unlock(&events_lock);
@@ -208,14 +239,14 @@ dr_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *o) {
  * @brief Create a producer with the \p ... configuration, a NULL terminated
  *        list of property names and values.
  *
- * It logs the protocol requests and reports the delivery of the messages
- * produced with produce1().
+ * It logs the protocol requests and the throttling by the brokers, and
+ * reports the delivery of the messages produced with produce1().
  * Destroy it with producer_destroy().
  */
 static rd_kafka_t *producer_new(const char *bootstraps,
                                 test_conf_log_interceptor_t **interceptorp,
                                 ...) {
-        const char *debug_contexts[] = {"protocol", "eos", NULL};
+        const char *debug_contexts[] = {"protocol", "eos", "broker", NULL};
         rd_kafka_conf_t *conf;
         va_list ap;
         const char *name;
@@ -1052,6 +1083,138 @@ static void do_test_txn_abort_held_back(void) {
 }
 
 
+static rd_bool_t
+is_init_producer_id_request_to(rd_kafka_mock_request_t *request, void *opaque) {
+        return rd_kafka_mock_request_api_key(request) ==
+                   RD_KAFKAP_InitProducerId &&
+               rd_kafka_mock_request_id(request) == *(const int32_t *)opaque;
+}
+
+
+/**
+ * @brief The throttle of a transaction coordinator does not apply to the
+ *        next one.
+ *
+ * The coordinator throttles the producer and says it is not the coordinator
+ * any more. The transaction coordinator is a logical broker, its address is
+ * changed to the one of the new coordinator. That one has not throttled the
+ * producer: the timeouts of the requests sent to it must not be extended, so a
+ * request that it answers too late times out as usual.
+ */
+static void do_test_txn_coord_change(void) {
+        const int throttle_ms       = 60 * 1000;
+        const int socket_timeout_ms = 1000; /* socket.timeout.ms below */
+        const int new_coord_rtt_ms  = 3000;
+        const char *txnid           = "0193_txn_coord_change";
+        int32_t coord_id;
+        size_t cnt;
+        int thr_cnt, thr_ms, thr_broker;
+        int tmo_cnt, tmo_ms, tmo_broker;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        test_conf_log_interceptor_t *interceptor;
+        rd_kafka_t *rk;
+        rd_kafka_error_t *error;
+
+        SUB_TEST_QUICK();
+
+        events_reset();
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, 1);
+
+        /* The first coordinator answers that it is not the coordinator, and
+         * throttles the producer. */
+        TEST_CALL_ERR__(rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_InitProducerId, 1,
+            RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 0));
+        TEST_CALL_ERR__(rd_kafka_mock_broker_push_request_throttle(
+            mcluster, 1, RD_KAFKAP_InitProducerId, 1, throttle_ms));
+
+        /* The new coordinator answers after the request timeout. */
+        TEST_CALL_ERR__(rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 2, RD_KAFKAP_InitProducerId, 1,
+            RD_KAFKA_RESP_ERR_NO_ERROR, new_coord_rtt_ms));
+
+        rk = producer_new(bootstraps, &interceptor, "transactional.id", txnid,
+                          "socket.timeout.ms", "1000", NULL);
+
+        /* Start to acquire the PID. The call times out or fails with the
+         * error of the first coordinator, the producer queries for the
+         * transaction coordinator again after it has lost it: change it
+         * before. */
+        error = rd_kafka_init_transactions(rk, 100);
+        TEST_ASSERT(error, "Expected init_transactions() to fail");
+        TEST_ASSERT(rd_kafka_error_is_retriable(error),
+                    "Expected a retriable error: %s",
+                    rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
+
+        coord_id = 1;
+        while (!test_mock_get_matching_request_cnt(
+            mcluster, is_init_producer_id_request_to, &coord_id))
+                rd_usleep(10 * 1000, 0);
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, 2);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 30 * 1000));
+
+        mtx_lock(&events_lock);
+        thr_cnt    = events.init_pid_throttle_cnt;
+        thr_ms     = events.init_pid_throttle_ms;
+        thr_broker = events.init_pid_throttle_broker;
+        tmo_cnt    = events.init_pid_tmout_cnt;
+        tmo_ms     = events.init_pid_tmout_ms;
+        tmo_broker = events.init_pid_tmout_broker;
+        mtx_unlock(&events_lock);
+
+        /* The first coordinator did throttle the producer, else the test
+         * would pass whether the throttle is dropped or not. */
+        TEST_ASSERT(thr_cnt == 1 && thr_broker == 1 && thr_ms == throttle_ms,
+                    "Expected the first coordinator (broker 1) to throttle "
+                    "the producer once for %dms in its InitProducerIdResponse, "
+                    "got %d throttle(s), the last by broker %d for %dms",
+                    throttle_ms, thr_cnt, thr_broker, thr_ms);
+
+        /* The new coordinator answers after the request timeout: the
+         * request times out, the throttle of the previous coordinator
+         * must not extend its timeout. */
+        TEST_ASSERT(tmo_cnt == 1 && tmo_broker == 2,
+                    "Expected the first InitProducerId sent to the new "
+                    "coordinator (broker 2), and only it, to time out, "
+                    "got %d timeout(s), the last on broker %d",
+                    tmo_cnt, tmo_broker);
+        /* The timeouts are scanned for once a second. */
+        TEST_ASSERT(tmo_ms >= socket_timeout_ms &&
+                        tmo_ms < socket_timeout_ms + 1500,
+                    "Expected the InitProducerId to time out after "
+                    "socket.timeout.ms=%dms, it did after %dms, while "
+                    "the new coordinator answers after %dms",
+                    socket_timeout_ms, tmo_ms, new_coord_rtt_ms);
+
+        coord_id = 1;
+        cnt      = test_mock_get_matching_request_cnt(
+            mcluster, is_init_producer_id_request_to, &coord_id);
+        TEST_ASSERT(cnt == 1,
+                    "Expected 1 InitProducerId to the first coordinator, "
+                    "got %" PRIusz,
+                    cnt);
+        coord_id = 2;
+        cnt      = test_mock_get_matching_request_cnt(
+            mcluster, is_init_producer_id_request_to, &coord_id);
+        TEST_ASSERT(cnt == 2,
+                    "Expected 2 InitProducerIds to the new coordinator, the "
+                    "first timed out and the second was answered, got "
+                    "%" PRIusz,
+                    cnt);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        producer_destroy(rk, interceptor);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0193_produce_throttle_mock(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
@@ -1073,6 +1236,7 @@ int main_0193_produce_throttle_mock(int argc, char **argv) {
         do_test_txn_commit_timeout();
         do_test_txn_held_back_timeout();
         do_test_txn_abort_held_back();
+        do_test_txn_coord_change();
 
         mtx_destroy(&events_lock);
 

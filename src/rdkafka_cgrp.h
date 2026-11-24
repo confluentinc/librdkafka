@@ -121,6 +121,21 @@ typedef struct rd_kafka_cgrp_s {
         struct {
                 rd_kafka_group_member_t *members;
                 int member_cnt;
+                /** Topics subscribed by other group members but NOT
+                 *  by the leader itself.  Used by the leader to
+                 *  monitor metadata for the entire group's
+                 *  subscription and trigger a rejoin when partition
+                 *  counts change.  NULL when not leader or when all
+                 *  members share the same subscription.
+                 *  (rd_kafka_topic_partition_list_t with
+                 *   RD_KAFKA_PARTITION_UA entries) */
+                rd_kafka_topic_partition_list_t *group_topics;
+                /** Effective group-wide topic info (topic name +
+                 *  partition_cnt) after metadata matching.  Sorted.
+                 *  Used to detect changes in group-wide topic
+                 *  metadata.  NULL when not leader.
+                 *  (rd_kafka_topic_info_t *) */
+                rd_list_t *group_subscribed_topics;
         } rkcg_group_leader;
 
         rd_kafka_q_t *rkcg_q;            /* Application poll queue */

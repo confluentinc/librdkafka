@@ -677,6 +677,23 @@ static rd_bool_t is_api_version_request_to(rd_kafka_mock_request_t *request,
                rd_kafka_mock_request_id(request) == *(const int32_t *)opaque;
 }
 
+/**
+ * @brief The connection attempts to a broker that is down fail, and are
+ *        reported to the application when the connection is refused, as it
+ *        is on Linux.
+ */
+static int ignore_connection_errors_cb(rd_kafka_t *rk,
+                                       rd_kafka_resp_err_t err,
+                                       const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                TEST_SAY("Ignoring allowed error: %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+                return 0;
+        }
+        return 1;
+}
+
 
 /**
  * @brief The connection to a broker that throttles the client is established
@@ -723,6 +740,7 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
         TEST_ASSERT(bootstraps, "Expected the addresses of two brokers");
         bootstraps++;
 
+        test_curr->is_fatal_cb = ignore_connection_errors_cb;
         rk = producer_new(bootstraps, &interceptor, "enable.metrics.push",
                           "false", NULL);
 
@@ -816,6 +834,7 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
         }
 
         producer_destroy(rk, interceptor);
+        test_curr->is_fatal_cb = NULL;
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();

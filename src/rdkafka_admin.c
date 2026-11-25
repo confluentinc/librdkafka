@@ -10309,8 +10309,10 @@ static int ut_AclsResponse_large(rd_bool_t is_delete) {
         rd_list_init(&p.rko_req->rko_u.admin_request.args, 0, NULL);
 
         pthread_attr_init(&attr);
-        rd_assert(pthread_attr_setstacksize(&attr, UT_ACL_STACK_SIZE) == 0);
-        rd_assert(pthread_create(&thr, &attr, ut_Acls_parse_thread, &p) == 0);
+        cnt = pthread_attr_setstacksize(&attr, UT_ACL_STACK_SIZE);
+        RD_UT_ASSERT(cnt == 0, "pthread_attr_setstacksize failed: %d", cnt);
+        cnt = pthread_create(&thr, &attr, ut_Acls_parse_thread, &p);
+        RD_UT_ASSERT(cnt == 0, "pthread_create failed: %d", cnt);
         pthread_join(thr, NULL);
         pthread_attr_destroy(&attr);
 

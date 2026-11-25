@@ -1409,10 +1409,9 @@ rd_kafka_mock_connection_request_throttle_add(rd_kafka_mock_connection_t *mconn,
  *          or 0 if it was not throttled. The entry is removed if
  *          \p remove, which is for when the response is sent.
  */
-static int
-rd_kafka_mock_connection_request_throttle(rd_kafka_mock_connection_t *mconn,
-                                          int32_t CorrId,
-                                          rd_bool_t remove) {
+int rd_kafka_mock_connection_request_throttle(rd_kafka_mock_connection_t *mconn,
+                                              int32_t CorrId,
+                                              rd_bool_t remove) {
         rd_kafka_mock_conn_throttle_t *thr;
         int throttle_ms;
 

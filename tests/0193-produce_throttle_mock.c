@@ -71,6 +71,10 @@ static struct {
         int reqtmout_cnt; /**< Requests that timed out */
         int bump_cnt;     /**< Epoch bumps of the idempotent producer */
 
+        /** The ProduceResponses that throttled the client */
+        int produce_throttle_cnt;
+        int produce_throttle_ms;     /**< the last throttle time */
+        int produce_throttle_broker; /**< and the id of its broker */
         /** The InitProducerIdResponses that throttled the client */
         int init_pid_throttle_cnt;
         int init_pid_throttle_ms;     /**< the last throttle time */
@@ -136,6 +140,11 @@ static void events_log_cb(const rd_kafka_t *rk,
                 events.init_pid_throttle_cnt++;
                 events.init_pid_throttle_broker = broker_id_before(buf, p);
                 events.init_pid_throttle_ms     = atoi(p + strlen(throttled));
+        } else if (!strcmp(fac, "THROTTLE") && (p = strstr(buf, throttled)) &&
+                   strstr(p, "by ProduceResponse")) {
+                events.produce_throttle_cnt++;
+                events.produce_throttle_broker = broker_id_before(buf, p);
+                events.produce_throttle_ms     = atoi(p + strlen(throttled));
         } else if (!strcmp(fac, "DRAIN") && strstr(buf, "bumped epoch")) {
                 events.bump_cnt++;
         } else if ((p = strstr(buf, sent)) && events.sent_cnt < EVENTS_MAX) {
@@ -656,6 +665,157 @@ static void do_test_destroy_while_held_back(void) {
                     rd_kafka_err2str(held.err));
         rd_free(interceptor);
 
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+static rd_bool_t is_api_version_request_to(rd_kafka_mock_request_t *request,
+                                           void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_ApiVersion &&
+               rd_kafka_mock_request_id(request) == *(const int32_t *)opaque;
+}
+
+
+/**
+ * @brief The connection to a broker that throttles the client is established
+ *        again when it is closed while a message is held back for it, to be
+ *        ready when the throttle ends. It is not when there is no message: the
+ *        broker is only connected to when there is a need for it (sparse
+ *        connections).
+ *
+ * Nothing else must request the connection, or it hides a failure:
+ * - The client bootstraps from the other broker, that stays connected. If the
+ *   only connection that goes down is the one to the bootstrap broker, the
+ *   client connects to any broker to refresh the metadata.
+ * - The client does not push metrics, the requests that it enqueues to a
+ *   broker that is not connected connect to it.
+ *
+ * @param queued whether a message is held back when the connection is closed.
+ */
+static void do_test_reconnect_while_throttled(rd_bool_t queued) {
+        const int throttle_ms = 4000;
+        int32_t broker_id     = 1;
+        const char *topic     = test_mk_topic_name("0193_reconnect", 1);
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        test_conf_log_interceptor_t *interceptor;
+        rd_kafka_t *rk;
+        struct msgres first, held, after;
+        int thr_cnt, thr_ms, thr_broker;
+        int64_t window_end;
+        size_t cnt = 0;
+
+        SUB_TEST_QUICK("%s", queued ? "message held back" : "no message");
+
+        events_reset();
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic, 1, 1));
+        TEST_CALL_ERR__(
+            rd_kafka_mock_partition_set_leader(mcluster, topic, 0, broker_id));
+        TEST_CALL_ERR__(rd_kafka_mock_broker_push_request_throttle(
+            mcluster, broker_id, RD_KAFKAP_Produce, 1, throttle_ms));
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        /* Only the address of the second broker. */
+        bootstraps = strchr(bootstraps, ',');
+        TEST_ASSERT(bootstraps, "Expected the addresses of two brokers");
+        bootstraps++;
+
+        rk = producer_new(bootstraps, &interceptor, "enable.metrics.push",
+                          "false", NULL);
+
+        /* The first broker connects, and throttles the client. */
+        produce_ok(rk, topic, 0, &first);
+
+        /* This message is held back. Let the broker thread see it. */
+        if (queued)
+                produce1(rk, topic, 0, &held);
+        rd_usleep(300 * 1000, NULL);
+
+        /* The client was throttled, and the message is held back, else the
+         * test would pass whether the connection is requested or not. */
+        mtx_lock(&events_lock);
+        thr_cnt    = events.produce_throttle_cnt;
+        thr_ms     = events.produce_throttle_ms;
+        thr_broker = events.produce_throttle_broker;
+        mtx_unlock(&events_lock);
+        TEST_ASSERT(thr_cnt == 1 && thr_broker == broker_id &&
+                        thr_ms == throttle_ms,
+                    "Expected broker %" PRId32
+                    " to throttle the client once for %dms in its "
+                    "ProduceResponse, got %d throttle(s), the last by broker "
+                    "%d for %dms",
+                    broker_id, throttle_ms, thr_cnt, thr_broker, thr_ms);
+        if (queued)
+                TEST_ASSERT(!held.done && events_sent_cnt() == 1,
+                            "Expected the message to be held back, it was "
+                            "sent: %d ProduceRequests, delivery report %s",
+                            events_sent_cnt(), held.done ? "received" : "none");
+
+        /* Close the connection, and let the client see it before the broker
+         * can be connected to again. */
+        TEST_CALL_ERR__(rd_kafka_mock_broker_set_down(mcluster, broker_id));
+        rd_usleep(300 * 1000, NULL);
+        rd_kafka_mock_clear_requests(mcluster);
+        TEST_CALL_ERR__(rd_kafka_mock_broker_set_up(mcluster, broker_id));
+
+        /* Look for a new connection until well before the throttle ends. */
+        window_end = first.dr_ts + (int64_t)(throttle_ms - 1000) * 1000;
+        while (test_clock() < window_end) {
+                rd_kafka_poll(rk, 50);
+                cnt = test_mock_get_matching_request_cnt(
+                    mcluster, is_api_version_request_to, &broker_id);
+                if (cnt > 0)
+                        break;
+        }
+
+        if (queued) {
+                TEST_ASSERT(cnt > 0,
+                            "Expected the client to connect to broker %" PRId32
+                            " again while it throttles the client and a "
+                            "message is held back, it did not in the %" PRId64
+                            "ms since the throttle of %dms started",
+                            broker_id, (test_clock() - first.dr_ts) / 1000,
+                            throttle_ms);
+
+                /* The connection is back, the message is still held back
+                 * until the throttle ends. */
+                TEST_ASSERT(!held.done && events_sent_cnt() == 1,
+                            "Expected the message to be held back when the "
+                            "connection is back, it was sent: %d "
+                            "ProduceRequests, delivery report %s",
+                            events_sent_cnt(), held.done ? "received" : "none");
+                wait_dr(rk, &held, 30 * 1000);
+                TEST_ASSERT(!held.err, "Message not delivered: %s",
+                            rd_kafka_err2str(held.err));
+                TEST_ASSERT(events_sent_cnt() == 2,
+                            "Expected 2 ProduceRequests, got %d",
+                            events_sent_cnt());
+                ASSERT_GAP_AT_LEAST(events_sent_gap(0, 1), throttle_ms,
+                                    "The gap between the throttled and the "
+                                    "held back ProduceRequest");
+        } else {
+                TEST_ASSERT(cnt == 0,
+                            "Expected no connection to broker %" PRId32
+                            " while nothing needs it, got %" PRIusz
+                            " ApiVersionRequest(s) in the %" PRId64
+                            "ms since the throttle of %dms started",
+                            broker_id, cnt, (test_clock() - first.dr_ts) / 1000,
+                            throttle_ms);
+
+                /* The broker is connected to when a message needs it, when
+                 * the throttle has passed. */
+                sleep_until(first.dr_ts + (int64_t)throttle_ms * 1000 +
+                            300 * 1000);
+                produce_ok(rk, topic, 0, &after);
+                TEST_ASSERT(events_sent_cnt() == 2,
+                            "Expected 2 ProduceRequests, got %d",
+                            events_sent_cnt());
+        }
+
+        producer_destroy(rk, interceptor);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();
@@ -1229,6 +1389,8 @@ int main_0193_produce_throttle_mock(int argc, char **argv) {
         do_test_version_not_honored();
         do_test_held_back_message_timeout();
         do_test_destroy_while_held_back();
+        do_test_reconnect_while_throttled(rd_true);
+        do_test_reconnect_while_throttled(rd_false);
         do_test_pipelined_requests_timeout();
         do_test_request_sent_while_muted();
         do_test_idempotent_retry_held_back();

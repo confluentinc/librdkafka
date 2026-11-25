@@ -314,6 +314,16 @@ struct rd_kafka_s {
          * reported as down. */
         rd_atomic64_t rk_last_all_brokers_down_reported_ts;
 
+        /** Reconnect backoff of removed brokers, keyed by
+         *  "<node id>|<host:port>", continued by the next broker added for
+         *  the same endpoint (re-bootstrap, Metadata purge).
+         *  \c lock is a leaf lock. */
+        struct {
+                mtx_t lock;
+                RD_MAP_TYPE(const char *, struct rd_kafka_reconnect_state_s *)
+                map;
+        } rk_reconnect_states;
+
         /**< Additional bootstrap servers list.
          *   contains all brokers added through rd_kafka_brokers_add().
          *   Doesn't contain the initially configured bootstrap brokers. */

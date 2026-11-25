@@ -55,6 +55,15 @@
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
 
+* Fix a hang in calls that wait for the consumer group's reply, such as
+  `rd_kafka_assignment()` or `rd_kafka_incremental_unassign()`, when the
+  consumer group terminated while their request was still queued: the
+  request was dropped without a reply. With the cooperative assignor,
+  consumer close could hang this way in the `rd_kafka_incremental_unassign()`
+  call for the revoke event, when the call for an earlier assign event had
+  already let the group terminate. Such calls now fail with `__DESTROY`
+  (@funcpp, #5694).
+
 
 # librdkafka v2.16.0
 

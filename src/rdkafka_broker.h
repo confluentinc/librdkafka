@@ -381,6 +381,15 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /**< Current, exponentially increased, reconnect backoff. */
         int rkb_reconnect_backoff_ms;
 
+        /** Connection attempts restored from rk_reconnect_states, counted
+         *  with rkb_c.connects by rd_kafka_connect_any().
+         *  Set before the broker thread starts. */
+        int32_t rkb_restored_connects;
+
+        /** Nodename of the last connection attempt, i.e. the host the
+         *  reconnect backoff was built against. Broker thread only. */
+        char rkb_reconnect_nodename[RD_KAFKA_NODENAME_SIZE];
+
         /**< Absolute timestamp of next allowed reconnect. */
         rd_ts_t rkb_ts_reconnect;
 

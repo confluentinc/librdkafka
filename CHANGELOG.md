@@ -20,7 +20,7 @@
   broker moves to a different host. It's still reset only once the next
   allowed reconnect is more than `reconnect.backoff.max.ms` in the past, so a
   connection that closes soon after being established stays paced.
-  Happening since 1.5.0, more often since 2.16.0 (#NNNN).
+  Happening since 1.5.0, more often since 2.16.0 (#5695).
 
 ### Admin fixes
 

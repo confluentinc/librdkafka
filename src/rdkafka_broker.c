@@ -1081,6 +1081,37 @@ restart:
 
 
 /**
+ * @brief KIP-219: Restart the timeout of the requests in \p rkbq as if they
+ *        were enqueued at \p until, the end of the throttle.
+ *
+ * A throttling broker mutes the connection, it reads no request from it
+ * until \p until. The time a request spends behind the mute must not count
+ * against its timeout, or it would time out, the connection would be
+ * torn down, and the next requests would be throttled again.
+ *
+ * The timeout of a request with an absolute timeout, like the
+ * ProduceRequest, is still limited by it.
+ *
+ * @locality broker thread
+ */
+static void rd_kafka_broker_bufq_throttle_extend(rd_kafka_broker_t *rkb,
+                                                 rd_kafka_bufq_t *rkbq,
+                                                 rd_ts_t until) {
+        rd_kafka_buf_t *rkbuf;
+
+        TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
+                rd_ts_t ts_timeout = rkbuf->rkbuf_ts_timeout;
+
+                rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, until);
+
+                /* Never shorten a timeout. */
+                if (rkbuf->rkbuf_ts_timeout < ts_timeout)
+                        rkbuf->rkbuf_ts_timeout = ts_timeout;
+        }
+}
+
+
+/**
  * Scan the wait-response and outbuf queues for message timeouts.
  *
  * Locality: Broker thread
@@ -1088,8 +1119,21 @@ restart:
 static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
         int inflight_cnt, retry_cnt, outq_cnt;
         int partial_cnt = 0;
+        rd_ts_t throttle_until;
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+
+        /* KIP-219: Extend the timeout of the requests in outbuf and waitresps
+         * queues while the client is throttled. Requests in the retry queue are
+         * not on the wire, they get a new timeout when they are moved to the
+         * output queue. */
+        throttle_until = rd_kafka_broker_throttle_until(rkb);
+        if (unlikely(throttle_until > now)) {
+                rd_kafka_broker_bufq_throttle_extend(rkb, &rkb->rkb_waitresps,
+                                                     throttle_until);
+                rd_kafka_broker_bufq_throttle_extend(rkb, &rkb->rkb_outbufs,
+                                                     throttle_until);
+        }
 
         /* In-flight requests waiting for response */
         inflight_cnt = rd_kafka_broker_bufq_timeout_scan(
@@ -4233,6 +4277,10 @@ rd_kafka_broker_outbufs_space(rd_kafka_broker_t *rkb) {
  * @param may_send if set to false there is something on the global level
  *                 that prohibits sending messages, such as a transactional
  *                 state.
+ * @param throttled whether the broker has throttled this connection (KIP-219),
+ *                  hold the messages in the partition queue until it ends.
+ *                  The connection is still requested if it is down and
+ *                  there are messages.
  * @param flushing App is calling flush(): override linger.ms as immediate.
  *
  * @returns the number of messages produced.
@@ -4247,6 +4295,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                                           rd_ts_t *next_wakeup,
                                           rd_bool_t do_timeout_scan,
                                           rd_bool_t may_send,
+                                          rd_bool_t throttled,
                                           rd_bool_t flushing) {
         int cnt = 0;
         int r;
@@ -4327,6 +4376,17 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                             !rd_kafka_txn_toppar_may_send_msg(rktp))) {
                 /* Partition not registered in transaction yet */
                 max_requests = 0;
+        } else if (unlikely(throttled)) {
+                /* Throttled by the broker: the messages are held in the
+                 * partition queue until the throttle ends.
+                 * Return before the "broker not up" check below, so keep
+                 * requesting the connection here if there are messages and it
+                 * is down, to have it ready when the throttle ends. */
+                max_requests = 0;
+                if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP &&
+                    (rktp->rktp_msgq.rkmq_msg_cnt > 0 ||
+                     rktp->rktp_xmit_msgq.rkmq_msg_cnt > 0))
+                        rkb->rkb_persistconn.internal++;
         } else if (max_requests > 0) {
                 /* Move messages from locked partition produce queue
                  * to broker-local xmit queue. */
@@ -4539,12 +4599,22 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
         rd_ts_t ret_next_wakeup = *next_wakeup;
         rd_kafka_pid_t pid      = RD_KAFKA_PID_INITIALIZER;
         rd_bool_t may_send      = rd_true;
+        rd_bool_t throttled     = rd_false;
         rd_bool_t flushing      = rd_false;
+        rd_ts_t throttle_until;
 
         /* Round-robin serve each toppar. */
         rktp = rkb->rkb_active_toppar_next;
         if (unlikely(!rktp))
                 return 0;
+
+        /* KIP-219: while the broker has throttled this connection no
+         * ProduceRequests are created, wake up when the throttle ends. */
+        throttle_until = rd_kafka_broker_throttle_until(rkb);
+        if (unlikely(throttle_until > now)) {
+                throttled = rd_true;
+                rd_kafka_set_next_wakeup(&ret_next_wakeup, throttle_until);
+        }
 
         if (rd_kafka_is_idempotent(rkb->rkb_rk)) {
                 /* Idempotent producer: get a copy of the current pid. */
@@ -4573,7 +4643,7 @@ static int rd_kafka_broker_produce_toppars(rd_kafka_broker_t *rkb,
                 /* Try producing toppar */
                 cnt += rd_kafka_toppar_producer_serve(
                     rkb, rktp, pid, now, &this_next_wakeup, do_timeout_scan,
-                    may_send, flushing);
+                    may_send, throttled, flushing);
 
                 rd_kafka_set_next_wakeup(&ret_next_wakeup, this_next_wakeup);
 
@@ -7226,6 +7296,116 @@ static int rd_ut_throttle_nodename_update(void) {
 
 
 /**
+ * @brief While the broker throttles the connection, the timeout of the queued
+ *        requests restarts at the end of the throttle: an absolute timeout
+ *        still limits it, and a timeout never gets shorter, whatever the
+ *        number of times or the order in which throttle deadlines are
+ *        applied.
+ *
+ * @sa rd_kafka_broker_bufq_throttle_extend()
+ */
+static int rd_ut_throttle_extend(void) {
+        /* All times are in seconds from the start of the test, with a
+         * socket.timeout.ms of 60 seconds. */
+        static const struct {
+                const char *what;
+                int abs_timeout_s; /**< 0: relative socket.timeout.ms */
+                rd_bool_t force;
+                int set_s;  /**< If not 0, timeout set before the throttle */
+                int exp1_s; /**< Timeout after a throttle ending at 10s */
+                int exp2_s; /**< Timeout after a throttle ending at 15s */
+        } cases[] = {
+            /* socket.timeout.ms from the end of the throttle */
+            {"relative", 0, rd_false, 0, 70, 75},
+            {"absolute, further than socket.timeout.ms", 120, rd_false, 0, 70,
+             75},
+            /* Limited by the absolute timeout */
+            {"absolute, reached by the throttle", 65, rd_false, 0, 65, 65},
+            {"absolute, before the end of the throttle", 5, rd_false, 0, 5, 5},
+            {"absolute, forced", 30, rd_true, 0, 30, 30},
+            /* Never shorter */
+            {"already later", 0, rd_false, 3600, 3600, 3600},
+        };
+        static const struct {
+                const char *what;
+                int until_s;
+                rd_bool_t second_exp; /**< Expect cases[].exp2_s */
+        } steps[] = {
+            {"a throttle", 10, rd_false},
+            {"the same throttle again", 10, rd_false},
+            {"a shorter throttle", 1, rd_false},
+            {"a longer throttle", 15, rd_true},
+        };
+        const rd_ts_t sec = 1000 * 1000;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_bufq_t rkbq;
+        rd_kafka_buf_t *bufs[RD_ARRAYSIZE(cases)];
+        rd_ts_t now;
+        char errstr[256];
+        size_t i, s;
+
+        conf = rd_kafka_conf_new();
+        RD_UT_ASSERT(rd_kafka_conf_set(conf, "socket.timeout.ms", "60000",
+                                       errstr,
+                                       sizeof(errstr)) == RD_KAFKA_CONF_OK,
+                     "%s", errstr);
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rk, "failed to create client: %s", errstr);
+
+        /* A logical broker has no connection to establish. */
+        rkb = rd_kafka_broker_add_logical(rk, "ut_throttle");
+
+        /* A queue of our own, the broker thread does not scan it. */
+        rd_kafka_bufq_init(&rkbq);
+
+        now = rd_clock();
+        for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                bufs[i] =
+                    rd_kafka_buf_new_request(rkb, RD_KAFKAP_Metadata, 1, 0);
+                if (cases[i].abs_timeout_s)
+                        rd_kafka_buf_set_abs_timeout0(
+                            bufs[i], cases[i].abs_timeout_s * 1000, now,
+                            cases[i].force);
+                /* As when it is enqueued. */
+                rd_kafka_buf_calc_timeout(rk, bufs[i], now);
+                if (cases[i].set_s)
+                        bufs[i]->rkbuf_ts_timeout = now + cases[i].set_s * sec;
+                rd_kafka_bufq_enq(&rkbq, bufs[i]);
+        }
+
+        for (s = 0; s < RD_ARRAYSIZE(steps); s++) {
+                rd_kafka_broker_bufq_throttle_extend(
+                    rkb, &rkbq, now + steps[s].until_s * sec);
+
+                for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                        rd_ts_t exp =
+                            now + (steps[s].second_exp ? cases[i].exp2_s
+                                                       : cases[i].exp1_s) *
+                                      sec;
+                        RD_UT_ASSERT(
+                            bufs[i]->rkbuf_ts_timeout == exp,
+                            "%s request, after %s: expected a "
+                            "timeout at %" PRId64 "ms, got %" PRId64 "ms",
+                            cases[i].what, steps[s].what, (exp - now) / 1000,
+                            (bufs[i]->rkbuf_ts_timeout - now) / 1000);
+                }
+        }
+
+        for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                rd_kafka_bufq_deq(&rkbq, bufs[i]);
+                rd_kafka_buf_destroy(bufs[i]);
+        }
+
+        rd_kafka_broker_destroy(rkb);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
  * @name Unit tests
  * @{
  *
@@ -7239,6 +7419,7 @@ int unittest_broker(void) {
         fails += rd_ut_nodename_to_hostname();
         fails += rd_ut_broker_throttle();
         fails += rd_ut_throttle_nodename_update();
+        fails += rd_ut_throttle_extend();
 
         return fails;
 }

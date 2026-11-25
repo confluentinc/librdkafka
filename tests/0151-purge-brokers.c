@@ -1339,7 +1339,9 @@ static void do_test_reconnect_backoff_after_reconnection(rd_bool_t stable) {
  *        reconnect time and continue its backoff.
  */
 static void do_test_reconnect_backoff_readded_broker(void) {
-        const int backoff_ms = 100, backoff_max_ms = 10000;
+        /* A last wait of 1.8-3.6s before the removal leaves time to add
+         * broker 2 back before its reconnect time, on a busy machine too. */
+        const int backoff_ms = 300, backoff_max_ms = 10000;
         /* Attempts to broker 2 before it's removed: the backoff is then
          * well above backoff_ms, but below backoff_max_ms. */
         const int attempts_before     = 5;
@@ -2873,7 +2875,9 @@ static int do_test_reconnect_backoff_renamed_broker_resolve_cb(
  *        allows.
  */
 static void do_test_reconnect_backoff_renamed_broker(void) {
-        const int backoff_ms = 100, backoff_max_ms = 10000;
+        /* A last wait of 1.8-3.6s before the rename leaves time to rename
+         * broker 2 before its reconnect time, on a busy machine too. */
+        const int backoff_ms = 300, backoff_max_ms = 10000;
         const int attempts_before     = 5;
         const char *debug_contexts[2] = {"broker", NULL};
         char bootstrap_servers[128], broker2_name[128], renamed_name[128];

@@ -258,10 +258,13 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
         rd_buf_t rkbuf_buf;      /**< Send/Recv byte buffer */
         rd_slice_t rkbuf_reader; /**< Buffer slice reader for rkbuf_buf */
 
-        int rkbuf_connid;    /* broker connection id (used when buffer
-                              * was partially sent). */
-        size_t rkbuf_totlen; /* recv: total expected length,
-                              * send: not used */
+        int rkbuf_connid;        /* broker connection id (used when buffer
+                                  * was partially sent). */
+        int rkbuf_connect_epoch; /* recv: the nodename epoch of the broker
+                                  * connection the response was received on,
+                                  * rkb_connect_epoch. */
+        size_t rkbuf_totlen;     /* recv: total expected length,
+                                  * send: not used */
 
         rd_crc32_t rkbuf_crc; /* Current CRC calculation */
 
@@ -836,7 +839,7 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 rd_kafka_buf_read_i32(rkbuf, &_throttle_time_ms);              \
                 rd_kafka_op_throttle_time((rkbuf)->rkbuf_rkb,                  \
                                           (rkbuf)->rkbuf_rkb->rkb_rk->rk_rep,  \
-                                          _throttle_time_ms);                  \
+                                          (rkbuf), _throttle_time_ms);         \
         } while (0)
 
 

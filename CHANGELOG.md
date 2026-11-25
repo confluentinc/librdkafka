@@ -18,6 +18,11 @@
   `-Wextra -Werror` failed to compile just by including the header
   (#5661).
 
+* Fix a stack overflow when parsing `DescribeAcls` and `DeleteAcls` responses
+  with many ACLs, which caused a crash on Alpine (musl) and a hang on macOS,
+  where thread stacks are small. The parsers used `alloca()` for each ACL; the
+  strings are now heap allocated and freed as each ACL is parsed (#5680).
+
 ### General fixes
 
 * Issues: #5630.

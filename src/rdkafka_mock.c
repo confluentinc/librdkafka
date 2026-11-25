@@ -2792,25 +2792,17 @@ void rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *cluster,
                                         int32_t broker_id,
                                         const char *host,
                                         int port) {
-        rd_kafka_mock_broker_t *mrkb;
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
 
-        mtx_lock(&cluster->lock);
-        TAILQ_FOREACH(mrkb, &cluster->brokers, link) {
-                if (mrkb->id == broker_id) {
-                        rd_kafka_dbg(
-                            cluster->rk, MOCK, "MOCK",
-                            "Broker %" PRId32
-                            ": Setting advertised listener from %s:%d to %s:%d",
-                            broker_id, mrkb->advertised_listener, mrkb->port,
-                            host, port);
-                        rd_snprintf(mrkb->advertised_listener,
-                                    sizeof(mrkb->advertised_listener), "%s",
-                                    host);
-                        mrkb->port = port;
-                        break;
-                }
-        }
-        mtx_unlock(&cluster->lock);
+        /* Set on the mock thread, which reads the advertised listener when
+         * building Metadata and FindCoordinator responses. */
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.name      = rd_strdup(host);
+        rko->rko_u.mock.lo        = port;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_SET_HOST_PORT;
+
+        rd_kafka_op_err_destroy(
+            rd_kafka_op_req(cluster->ops, rko, RD_POLL_INFINITE));
 }
 
 rd_kafka_resp_err_t
@@ -2932,6 +2924,19 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = rd_strdup(rko->rko_u.mock.name);
                 else
                         mrkb->rack = NULL;
+                break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_HOST_PORT:
+                rd_kafka_dbg(
+                    mcluster->rk, MOCK, "MOCK",
+                    "Broker %" PRId32
+                    ": Setting advertised listener from %s:%d to %s:%d",
+                    mrkb->id, mrkb->advertised_listener, (int)mrkb->port,
+                    rko->rko_u.mock.name, (int)rko->rko_u.mock.lo);
+                rd_snprintf(mrkb->advertised_listener,
+                            sizeof(mrkb->advertised_listener), "%s",
+                            rko->rko_u.mock.name);
+                mrkb->port = (uint16_t)rko->rko_u.mock.lo;
                 break;
 
         case RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA:
@@ -3194,6 +3199,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+        case RD_KAFKA_MOCK_CMD_BROKER_SET_HOST_PORT:
         case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
         case RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);

@@ -417,7 +417,8 @@ A retry by librdkafka at this point will not cause duplicate messages.
 Internal error ERR__MSG_TIMED_OUT.
 
 The message could not be successfully transmitted before `message.timeout.ms`
-expired, typically due to no leader being available or no broker connection.
+expired, typically due to no leader being available, no broker connection, or
+the broker throttling the producer.
 The message may have been retried due to other errors but
 those error messages are abstracted by the ERR__MSG_TIMED_OUT error code.
 
@@ -2558,7 +2559,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-192 - Cleaner idempotence semantics                                  | 1.0.0                       | Not supported (superceeded by KIP-360)                                                        |
 | KIP-195 - AdminAPI: CreatePartitions                                     | 1.0.0                       | Supported                                                                                     |
 | KIP-204 - AdminAPI: DeleteRecords                                        | 1.1.0                       | Supported                                                                                     |
-| KIP-219 - Client-side throttling                                         | 2.0.0                       | Not supported                                                                                 |
+| KIP-219 - Client-side throttling                                         | 2.0.0                       | Partially supported (Produce and Fetch requests only)                                         |
 | KIP-222 - AdminAPI: Consumer group operations                            | 2.0.0                       | Supported                                                                                     |
 | KIP-223 - Consumer partition lead metric                                 | 2.0.0                       | Not supported                                                                                 |
 | KIP-226 - AdminAPI: Dynamic broker config                                | 1.1.0                       | Supported                                                                                     |

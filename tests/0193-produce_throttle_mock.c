@@ -716,8 +716,11 @@ static int ignore_connection_errors_cb(rd_kafka_t *rk,
  * - The client bootstraps from the other broker, that stays connected. If the
  *   only connection that goes down is the one to the bootstrap broker, the
  *   client connects to any broker to refresh the metadata.
- * - The client does not push metrics, the requests that it enqueues to a
- *   broker that is not connected connect to it.
+ * - The brokers do not support telemetry: the requests that the client
+ *   enqueues to a broker that is not connected connect to it. The client does
+ *   not set enable.metrics.push=false instead, rd_kafka_destroy() of such a
+ *   client fails the assertion of rd_kafka_telemetry_set_terminated() on the
+ *   thread when asserts are enabled.
  *
  * The throttle is kept by the broker. The mock leaves a broker that is down
  * out of the metadata, and the client terminates the brokers that are not in
@@ -750,6 +753,8 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
             rd_kafka_mock_partition_set_leader(mcluster, topic, 0, broker_id));
         TEST_CALL_ERR__(rd_kafka_mock_broker_push_request_throttle(
             mcluster, broker_id, RD_KAFKAP_Produce, 1, throttle_ms));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_GetTelemetrySubscriptions, -1, -1));
         rd_kafka_mock_start_request_tracking(mcluster);
 
         /* Only the address of the second broker. */
@@ -758,8 +763,7 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
         bootstraps++;
 
         test_curr->is_fatal_cb = ignore_connection_errors_cb;
-        rk = producer_new(bootstraps, &interceptor, "enable.metrics.push",
-                          "false", NULL);
+        rk                     = producer_new(bootstraps, &interceptor, NULL);
 
         /* The first broker connects, and throttles the client. */
         produce_ok(rk, topic, 0, &first);

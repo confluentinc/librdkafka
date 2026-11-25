@@ -1,5 +1,17 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Enhancements
+
+* Support client-side throttling
+  ([KIP-219](https://cwiki.apache.org/confluence/display/KAFKA/KIP-219+-+Improve+quota+communication))
+  for Produce and Fetch requests only. When a broker throttles a client because
+  of a quota, the client stops sending ProduceRequests and FetchRequests to
+  that broker until the throttle time has passed. The other request types are
+  not held back, only their timeouts are extended while the broker throttles,
+  so they don't time out behind the connection that the broker has muted.
+  Before, the client kept sending requests to that connection and they could
+  time out behind it (#5675, #5681, #5696).
+
 ## Fixes
 
 ### General fixes

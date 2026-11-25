@@ -367,6 +367,8 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                 SessionId = -1, Epoch, TopicsCnt;
         int8_t IsolationLevel;
         size_t totsize = 0;
+        int throttle_ms;
+        size_t of_topics;
 
         int32_t tags_to_write[1]   = {0};
         uint64_t tags_to_write_cnt = 0;
@@ -389,6 +391,12 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_read_i32(rkbuf, &Epoch);
         }
 
+        /* Whether the request is throttled, whatever its version: a broker
+         * does not look at the version, only the field is not in all of
+         * them. */
+        throttle_ms = rd_kafka_mock_connection_request_throttle(
+            mconn, rkbuf->rkbuf_reqhdr.CorrId, rd_false /*keep*/);
+
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: ThrottleTime */
                 rd_kafka_mock_buf_write_ThrottleTime(mconn, resp);
@@ -407,6 +415,9 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
         }
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
+
+        /* Where the topics start, to drop them if the request is throttled. */
+        of_topics = rd_buf_write_pos(&resp->rkbuf_buf);
 
         /* Response: #Topics */
         rd_kafka_buf_write_arraycnt(resp, TopicsCnt);
@@ -667,6 +678,22 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_read_str(rkbuf, &RackId);
                 RD_KAFKAP_STR_DUPA(&rack, &RackId);
                 /* Matt might do something sensible with this */
+        }
+
+        /* A broker answers a throttled Fetch with an empty response, without
+         * any topic, whatever it found for them (KIP-219). Drop them here, so
+         * that the errors, and the data that the partitions had, are still
+         * seen as without a throttle: totsize decides below whether the
+         * response is delayed, as when the broker has no data to return. */
+        if (throttle_ms > 0) {
+                int r = rd_buf_write_seek(&resp->rkbuf_buf, of_topics);
+
+                /* The position was taken from this buffer, it can't fail, and
+                 * a response that kept its topics would only fail the test
+                 * that looks at the throttle in a confusing way. */
+                rd_assert(!r);
+                rd_kafka_buf_write_arraycnt(resp, 0);
+                changed_leaders_cnt = 0;
         }
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 16 && changed_leaders_cnt) {

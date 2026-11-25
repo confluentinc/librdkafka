@@ -4279,6 +4279,8 @@ rd_kafka_broker_outbufs_space(rd_kafka_broker_t *rkb) {
  *                 state.
  * @param throttled whether the broker has throttled this connection (KIP-219),
  *                  hold the messages in the partition queue until it ends.
+ *                  The connection is still requested if it is down and
+ *                  there are messages.
  * @param flushing App is calling flush(): override linger.ms as immediate.
  *
  * @returns the number of messages produced.
@@ -4375,8 +4377,16 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                 /* Partition not registered in transaction yet */
                 max_requests = 0;
         } else if (unlikely(throttled)) {
-                /* Throttled by the broker */
+                /* Throttled by the broker: the messages are held in the
+                 * partition queue until the throttle ends.
+                 * Return before the "broker not up" check below, so keep
+                 * requesting the connection here if there are messages and it
+                 * is down, to have it ready when the throttle ends. */
                 max_requests = 0;
+                if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP &&
+                    (rktp->rktp_msgq.rkmq_msg_cnt > 0 ||
+                     rktp->rktp_xmit_msgq.rkmq_msg_cnt > 0))
+                        rkb->rkb_persistconn.internal++;
         } else if (max_requests > 0) {
                 /* Move messages from locked partition produce queue
                  * to broker-local xmit queue. */

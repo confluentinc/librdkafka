@@ -621,7 +621,6 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
-                                RD_KAFKA_MOCK_CMD_BROKER_SET_HOST_PORT,
                                 RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
                                 RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA,
                                 RD_KAFKA_MOCK_CMD_BROKER_ADD,
@@ -639,7 +638,6 @@ struct rd_kafka_op_s {
                                                     *    PART_SET_FOLLOWER
                                                     *    PART_SET_FOLLOWER_WMARKS
                                                     *    BROKER_SET_RACK
-                                                    *    BROKER_SET_HOST_PORT
                                                     *    COORD_SET (key_type)
                                                     *    PART_PUSH_LEADER_RESPONSE
                                                     */
@@ -658,7 +656,6 @@ struct rd_kafka_op_s {
                                                     *    PART_SET_LEADER
                                                     *    BROKER_SET_UPDOWN
                                                     *    BROKER_SET_RACK
-                                                    *    BROKER_SET_HOST_PORT
                                                     *    BROKER_DECOMMISSION
                                                     *    BROKER_ADD
                                                     *    COORD_SET */
@@ -668,8 +665,6 @@ struct rd_kafka_op_s {
                                                     *    BROKER_SET_UPDOWN
                                                     *    APIVERSION_SET (minver)
                                                     *    BROKER_SET_RTT
-                                                    *    BROKER_SET_HOST_PORT
-                                                    *      (port)
                                                     *    PART_DELETE_RECORDS
                                                     *      (before_offset)
                                                     */

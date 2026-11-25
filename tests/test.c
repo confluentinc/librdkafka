@@ -319,6 +319,8 @@ _TEST_DECL(0191_ipv6_nodename_mock);
 _TEST_DECL(0192_cgrp_static_session_timeout_mock);
 _TEST_DECL(0193_produce_throttle_mock);
 _TEST_DECL(0194_produce_throttle);
+_TEST_DECL(0195_fetch_throttle_mock);
+_TEST_DECL(0196_fetch_throttle);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -622,6 +624,8 @@ struct test tests[] = {
     _TEST(0192_cgrp_static_session_timeout_mock, TEST_F_LOCAL),
     _TEST(0193_produce_throttle_mock, TEST_F_LOCAL),
     _TEST(0194_produce_throttle, 0, TEST_BRKVER(3, 0, 0, 0)),
+    _TEST(0195_fetch_throttle_mock, TEST_F_LOCAL),
+    _TEST(0196_fetch_throttle, 0, TEST_BRKVER(3, 0, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

@@ -71,6 +71,10 @@ static struct {
         int reqtmout_cnt; /**< Requests that timed out */
         int bump_cnt;     /**< Epoch bumps of the idempotent producer */
 
+        /** How many times the brokers (ids 0 to 3) were added to the client,
+         *  the throttle is kept by the broker. */
+        int broker_added_cnt[4];
+
         /** The ProduceResponses that throttled the client */
         int produce_throttle_cnt;
         int produce_throttle_ms;     /**< the last throttle time */
@@ -145,6 +149,12 @@ static void events_log_cb(const rd_kafka_t *rk,
                 events.produce_throttle_cnt++;
                 events.produce_throttle_broker = broker_id_before(buf, p);
                 events.produce_throttle_ms     = atoi(p + strlen(throttled));
+        } else if (!strcmp(fac, "BROKER") &&
+                   (p = strstr(buf, "Added new broker with NodeId "))) {
+                int id = atoi(p + strlen("Added new broker with NodeId "));
+
+                if (id >= 0 && id < 4)
+                        events.broker_added_cnt[id]++;
         } else if (!strcmp(fac, "DRAIN") && strstr(buf, "bumped epoch")) {
                 events.bump_cnt++;
         } else if ((p = strstr(buf, sent)) && events.sent_cnt < EVENTS_MAX) {
@@ -709,6 +719,13 @@ static int ignore_connection_errors_cb(rd_kafka_t *rk,
  * - The client does not push metrics, the requests that it enqueues to a
  *   broker that is not connected connect to it.
  *
+ * The throttle is kept by the broker. The mock leaves a broker that is down
+ * out of the metadata, and the client terminates the brokers that are not in
+ * it: the broker that is added again has not throttled the client. The client
+ * requests the metadata when the broker of a partition is not up, at most once
+ * a second, so the broker is only down for as long as it takes to close its
+ * connection.
+ *
  * @param queued whether a message is held back when the connection is closed.
  */
 static void do_test_reconnect_while_throttled(rd_bool_t queued) {
@@ -720,7 +737,7 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
         test_conf_log_interceptor_t *interceptor;
         rd_kafka_t *rk;
         struct msgres first, held, after;
-        int thr_cnt, thr_ms, thr_broker;
+        int thr_cnt, thr_ms, thr_broker, added;
         int64_t window_end;
         size_t cnt = 0;
 
@@ -772,11 +789,10 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
                             "sent: %d ProduceRequests, delivery report %s",
                             events_sent_cnt(), held.done ? "received" : "none");
 
-        /* Close the connection, and let the client see it before the broker
-         * can be connected to again. */
-        TEST_CALL_ERR__(rd_kafka_mock_broker_set_down(mcluster, broker_id));
-        rd_usleep(300 * 1000, NULL);
+        /* Close the connection, the broker accepts connections again right
+         * away. */
         rd_kafka_mock_clear_requests(mcluster);
+        TEST_CALL_ERR__(rd_kafka_mock_broker_set_down(mcluster, broker_id));
         TEST_CALL_ERR__(rd_kafka_mock_broker_set_up(mcluster, broker_id));
 
         /* Look for a new connection until well before the throttle ends. */
@@ -797,6 +813,18 @@ static void do_test_reconnect_while_throttled(rd_bool_t queued) {
                             "ms since the throttle of %dms started",
                             broker_id, (test_clock() - first.dr_ts) / 1000,
                             throttle_ms);
+
+                /* The broker kept the throttle: it was not terminated and
+                 * added again. */
+                mtx_lock(&events_lock);
+                added = events.broker_added_cnt[broker_id];
+                mtx_unlock(&events_lock);
+                TEST_ASSERT(added == 1,
+                            "Expected broker %" PRId32
+                            " to be added to the client once, it was %d "
+                            "times: a broker that is added again has not "
+                            "throttled the client",
+                            broker_id, added);
 
                 /* The connection is back, the message is still held back
                  * until the throttle ends. */

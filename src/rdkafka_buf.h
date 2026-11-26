@@ -356,7 +356,13 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
          * scanner.
          * @warning rkb_retrybufs is NOT purged on broker down.
          */
-        rd_ts_t rkbuf_ts_timeout; /* Request timeout (absolute time). */
+        rd_ts_t rkbuf_ts_timeout;       /* Request timeout (absolute time). */
+        rd_ts_t rkbuf_ts_timeout_start; /* The time rkbuf_ts_timeout was
+                                         * calculated from: when the request
+                                         * was enqueued, enqueued again to be
+                                         * retried, or its timeout was reset
+                                         * on connection reset. Set by
+                                         * rd_kafka_buf_calc_timeout(). */
         rd_ts_t
             rkbuf_abs_timeout; /* Absolute timeout for request, including
                                 * retries.
@@ -971,7 +977,9 @@ rd_kafka_buf_set_timeout(rd_kafka_buf_t *rkbuf, int timeout_ms, rd_ts_t now) {
 
 
 /**
- * @brief Calculate the effective timeout for a request attempt
+ * @brief Calculate the effective timeout for a request attempt, measured from
+ *        \p now: the time the request is enqueued. It is saved as
+ *        rkbuf_ts_timeout_start.
  */
 void rd_kafka_buf_calc_timeout(const rd_kafka_t *rk,
                                rd_kafka_buf_t *rkbuf,

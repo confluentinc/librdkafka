@@ -1081,28 +1081,63 @@ restart:
 
 
 /**
- * @brief KIP-219: Restart the timeout of the requests in \p rkbq as if they
- *        were enqueued at \p until, the end of the throttle.
+ * @brief KIP-219: Get the start and the end of the throttle in effect,
+ *        the end is 0 if the broker has not throttled this client.
+ *
+ *        Both are read with the broker lock held, as they are written, so
+ *        that the start belongs to the end.
+ *
+ * @locks rd_kafka_broker_lock() is acquired
+ */
+static void rd_kafka_broker_throttle_window(rd_kafka_broker_t *rkb,
+                                            rd_ts_t *startp,
+                                            rd_ts_t *endp) {
+        rd_kafka_broker_lock(rkb);
+        *startp = rkb->rkb_ts_throttle_start;
+        *endp   = rd_kafka_broker_throttle_until(rkb);
+        rd_kafka_broker_unlock(rkb);
+}
+
+
+/**
+ * @brief KIP-219: Extend the timeout of the requests in \p rkbq by the time
+ *        the broker throttled the connection while their timeout was
+ *        counting, the throttle being the one from \p throttle_start to
+ *        \p throttle_end.
  *
  * A throttling broker mutes the connection, it reads no request from it
- * until \p until. The time a request spends behind the mute must not count
- * against its timeout, or it would time out, the connection would be
+ * until \p throttle_end. The time a request spends behind the mute must not
+ * count against its timeout, or it would time out, the connection would be
  * torn down, and the next requests would be throttled again.
+ * The timeout is thus paused for the throttle. After it elapses, the request
+ * has the time it had left when the throttle began.
  *
  * The timeout of a request with an absolute timeout, like the
- * ProduceRequest, is still limited by it.
+ * ProduceRequest, is still limited by it, and a timeout is never shortened.
  *
  * @locality broker thread
  */
 static void rd_kafka_broker_bufq_throttle_extend(rd_kafka_broker_t *rkb,
                                                  rd_kafka_bufq_t *rkbq,
-                                                 rd_ts_t until) {
+                                                 rd_ts_t throttle_start,
+                                                 rd_ts_t throttle_end) {
         rd_kafka_buf_t *rkbuf;
 
         TAILQ_FOREACH(rkbuf, &rkbq->rkbq_bufs, rkbuf_link) {
                 rd_ts_t ts_timeout = rkbuf->rkbuf_ts_timeout;
+                rd_ts_t ts_start   = rkbuf->rkbuf_ts_timeout_start;
 
-                rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, until);
+                /* The timeout without the throttle, */
+                rd_kafka_buf_calc_timeout(rkb->rkb_rk, rkbuf, ts_start);
+
+                /* plus the throttled time that is after its start, */
+                rkbuf->rkbuf_ts_timeout += RD_MAX(ts_start, throttle_end) -
+                                           RD_MAX(ts_start, throttle_start);
+
+                /* limited by the absolute timeout, if there is one. */
+                if (rkbuf->rkbuf_abs_timeout &&
+                    rkbuf->rkbuf_ts_timeout > rkbuf->rkbuf_abs_timeout)
+                        rkbuf->rkbuf_ts_timeout = rkbuf->rkbuf_abs_timeout;
 
                 /* Never shorten a timeout. */
                 if (rkbuf->rkbuf_ts_timeout < ts_timeout)
@@ -1129,10 +1164,14 @@ static void rd_kafka_broker_timeout_scan(rd_kafka_broker_t *rkb, rd_ts_t now) {
          * output queue. */
         throttle_until = rd_kafka_broker_throttle_until(rkb);
         if (unlikely(throttle_until > now)) {
-                rd_kafka_broker_bufq_throttle_extend(rkb, &rkb->rkb_waitresps,
-                                                     throttle_until);
-                rd_kafka_broker_bufq_throttle_extend(rkb, &rkb->rkb_outbufs,
-                                                     throttle_until);
+                rd_ts_t throttle_start;
+
+                rd_kafka_broker_throttle_window(rkb, &throttle_start,
+                                                &throttle_until);
+                rd_kafka_broker_bufq_throttle_extend(
+                    rkb, &rkb->rkb_waitresps, throttle_start, throttle_until);
+                rd_kafka_broker_bufq_throttle_extend(
+                    rkb, &rkb->rkb_outbufs, throttle_start, throttle_until);
         }
 
         /* In-flight requests waiting for response */
@@ -3481,7 +3520,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         /* The throttle time was set by the previous host,
                          * the new one has not throttled this client. */
                         rd_atomic64_set(&rkb->rkb_ts_throttle_until, 0);
-                        updated = rd_true;
+                        rkb->rkb_ts_throttle_start = 0;
+                        updated                    = rd_true;
                 }
 
                 rd_kafka_mk_brokername(brokername, sizeof(brokername),
@@ -5748,7 +5788,8 @@ void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
                  * the new one has not throttled this client.
                  * Reset with the lock held, see rd_kafka_broker_throttle(). */
                 rd_atomic64_set(&rkb->rkb_ts_throttle_until, 0);
-                changed = rd_true;
+                rkb->rkb_ts_throttle_start = 0;
+                changed                    = rd_true;
         }
         rd_kafka_broker_unlock(rkb);
 
@@ -6866,19 +6907,26 @@ void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
 }
 
 /**
- * @brief The broker throttled this client for \p throttle_time_ms, as reported
- *        in the response to a request of type \p ApiKey and version
- *        \p ApiVersion (KIP-219): record the time until which requests are
- *        to be held back.
+ * @brief KIP-219: The broker throttled this client for \p throttle_time_ms,
+ *        as reported in the response to a request of type \p ApiKey and
+ *        version \p ApiVersion: record the throttle.
  *
- *        Ignored if the throttle time is not positive or the version is not
- *        to be honored, see rd_kafka_ApiVersion_honors_throttle().
- *        The time only moves forward, a shorter throttle time does not
- *        shorten the one in effect.
+ *        A throttle is the time from which, until which, the broker has muted
+ *        the connection. Requests are held back until it ends, see
+ *        rd_kafka_broker_throttle_until(), and the timeout of those already
+ *        queued is paused for it, see rd_kafka_broker_bufq_throttle_extend().
  *
- *        Also ignored if the nodename of the broker has changed since the
- *        response was received: the host that throttled this client is not
- *        the one of the broker any more.
+ *        A throttle time that is recorded while the client is throttled
+ *        extends that throttle: it keeps its start and its end only moves
+ *        forward, so a shorter throttle time does not shorten the one in
+ *        effect. One that is recorded after the previous throttle has ended
+ *        begins a new throttle, at the time of the call.
+ *
+ *        Ignored if the throttle time is not positive, if the version is not
+ *        to be honored, see rd_kafka_ApiVersion_honors_throttle(), or if the
+ *        nodename of the broker has changed since the response was received:
+ *        the host that throttled this client is not the one of the broker
+ *        any more.
  *
  * @remark Counted from when the response is handled, not received: the
  *         client may hold back slightly longer than the broker, never shorter.
@@ -6891,27 +6939,35 @@ void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
                               int16_t ApiVersion,
                               int nodename_epoch,
                               int throttle_time_ms) {
-        rd_ts_t until;
+        rd_ts_t now, until, prev_until;
         rd_bool_t stale;
 
         if (throttle_time_ms <= 0 ||
             !rd_kafka_ApiVersion_honors_throttle(ApiKey, ApiVersion))
                 return;
 
-        until = rd_clock() + (rd_ts_t)throttle_time_ms * 1000;
+        now   = rd_clock();
+        until = now + (rd_ts_t)throttle_time_ms * 1000;
 
         /* The deadline is written with the broker lock held, here and when
          * the nodename changes. A throttle time from the previous host is
          * thus either recorded before the nodename change, and cleared by its
          * reset, or ignored. Both the main thread and the broker thread can
          * handle responses, the lock also serializes them so that a shorter
-         * throttle time never overwrites a longer one. The readers don't take
-         * the lock. */
+         * throttle time never overwrites a longer one. The readers of the
+         * deadline don't take the lock, the one of the throttle start and end
+         * together does. */
         rd_kafka_broker_lock(rkb);
         stale = nodename_epoch != rkb->rkb_nodename_epoch;
-        if (!stale &&
-            (rd_ts_t)rd_atomic64_get(&rkb->rkb_ts_throttle_until) < until)
-                rd_atomic64_set(&rkb->rkb_ts_throttle_until, until);
+        if (!stale) {
+                prev_until =
+                    (rd_ts_t)rd_atomic64_get(&rkb->rkb_ts_throttle_until);
+                /* The previous throttle has ended and this one is a new one. */
+                if (now > prev_until)
+                        rkb->rkb_ts_throttle_start = now;
+                if (prev_until < until)
+                        rd_atomic64_set(&rkb->rkb_ts_throttle_until, until);
+        }
         rd_kafka_broker_unlock(rkb);
 
         if (stale) {
@@ -7130,7 +7186,7 @@ static int rd_ut_broker_throttle(void) {
         rd_kafka_t *rk;
         rd_kafka_broker_t *rkb;
         char errstr[256];
-        rd_ts_t before, after, until, prev;
+        rd_ts_t before, after, until, prev, start, first_start;
         int epoch;
 
         conf = rd_kafka_conf_new();
@@ -7157,13 +7213,31 @@ static int rd_ut_broker_throttle(void) {
                      "expected no throttle, got %" PRId64,
                      rd_kafka_broker_throttle_until(rkb));
 
-        /* The deadline is the time of the call plus the throttle time. */
+        /* A throttle that has ended when the next one is recorded. */
+        rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 6, epoch, 1);
+        rd_kafka_broker_throttle_window(rkb, &first_start, &until);
+        RD_UT_ASSERT(first_start > 0 && until > first_start,
+                     "expected a throttle from %" PRId64 " to %" PRId64,
+                     first_start, until);
+        rd_usleep(10 * 1000, NULL);
+
+        /* The deadline is the time of the call plus the throttle time, and
+         * the throttle begins at the time of the call: the previous one
+         * has ended. */
         before = rd_clock();
         rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 6, epoch, 1000);
         after = rd_clock();
-        until = rd_kafka_broker_throttle_until(rkb);
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
         RD_UT_ASSERT_RANGE(until, before + 1000 * 1000, after + 1000 * 1000,
                            "%" PRId64);
+        RD_UT_ASSERT_RANGE(start, before, after, "%" PRId64);
+        RD_UT_ASSERT(start > first_start,
+                     "expected a new throttle after the previous one ended");
+        first_start = start;
+
+        /* The clock must have moved on for a start that was moved by mistake
+         * to differ from the one recorded. */
+        rd_usleep(10 * 1000, NULL);
 
         /* A shorter throttle time, from any request type, does not shorten
          * the throttle time in effect. */
@@ -7174,6 +7248,11 @@ static int rd_ut_broker_throttle(void) {
                      "a shorter throttle time must not move the deadline: "
                      "was %" PRId64 ", now %" PRId64,
                      prev, rd_kafka_broker_throttle_until(rkb));
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start == first_start,
+                     "a shorter throttle time must not move the start: "
+                     "was %" PRId64 ", now %" PRId64,
+                     first_start, start);
 
         /* A longer one extends it, from any request type, including those
          * that are honored at every version. */
@@ -7184,6 +7263,12 @@ static int rd_ut_broker_throttle(void) {
                      "expected a deadline of at least %" PRId64
                      ", got %" PRId64,
                      before + 20000 * 1000, until);
+        /* The throttle in effect is extended: it keeps its start. */
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start == first_start,
+                     "extending the throttle must not move the start: "
+                     "was %" PRId64 ", now %" PRId64,
+                     first_start, start);
 
         rd_kafka_broker_destroy(rkb);
         rd_kafka_destroy(rk);
@@ -7221,7 +7306,7 @@ static int rd_ut_throttle_nodename_update(void) {
         rd_kafka_op_t *rko;
         char errstr[256];
         char nodename[RD_KAFKA_NODENAME_SIZE];
-        rd_ts_t until;
+        rd_ts_t until, start;
         int epoch, prev_epoch;
 
         conf = rd_kafka_conf_new();
@@ -7239,6 +7324,8 @@ static int rd_ut_throttle_nodename_update(void) {
         rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, epoch, 60000);
         until = rd_kafka_broker_throttle_until(rkb);
         RD_UT_ASSERT(until > rd_clock(), "expected a throttle time");
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start > 0, "expected the start of the throttle");
 
         /* Same nodename */
         rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
@@ -7247,6 +7334,8 @@ static int rd_ut_throttle_nodename_update(void) {
         rd_kafka_op_err_destroy(rd_kafka_op_req(rkb->rkb_ops, rko, -1));
         RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == until,
                      "the same nodename must not reset the deadline");
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start > 0, "the same nodename must not reset the start");
 
         /* New nodename */
         rko = rd_kafka_op_new(RD_KAFKA_OP_NODE_UPDATE);
@@ -7256,6 +7345,10 @@ static int rd_ut_throttle_nodename_update(void) {
         RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
                      "a new nodename must reset the deadline, got %" PRId64,
                      rd_kafka_broker_throttle_until(rkb));
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start == 0,
+                     "a new nodename must reset the start, got %" PRId64,
+                     start);
 
         /* A response received before the nodename changed, from the previous
          * host, does not throttle the broker. */
@@ -7267,6 +7360,11 @@ static int rd_ut_throttle_nodename_update(void) {
                      "a throttle time from the previous host must be ignored, "
                      "got %" PRId64,
                      rd_kafka_broker_throttle_until(rkb));
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start == 0,
+                     "a throttle time from the previous host must not set "
+                     "the start, got %" PRId64,
+                     start);
 
         /* One from the current host does. */
         rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, epoch, 60000);
@@ -7282,6 +7380,10 @@ static int rd_ut_throttle_nodename_update(void) {
         RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
                      "a new nodename must reset the deadline, got %" PRId64,
                      rd_kafka_broker_throttle_until(rkb));
+        rd_kafka_broker_throttle_window(rkb, &start, &until);
+        RD_UT_ASSERT(start == 0,
+                     "a new nodename must reset the start, got %" PRId64,
+                     start);
         rd_kafka_broker_throttle(rkb, RD_KAFKAP_Produce, 10, prev_epoch, 60000);
         RD_UT_ASSERT(rd_kafka_broker_throttle_until(rkb) == 0,
                      "a throttle time from the previous host must be ignored, "
@@ -7296,45 +7398,58 @@ static int rd_ut_throttle_nodename_update(void) {
 
 
 /**
- * @brief While the broker throttles the connection, the timeout of the queued
- *        requests restarts at the end of the throttle: an absolute timeout
- *        still limits it, and a timeout never gets shorter, whatever the
- *        number of times or the order in which throttle deadlines are
- *        applied.
+ * @brief While the broker throttles the connection the timeout of the queued
+ *        requests is paused: it is extended by the part of the throttle that
+ *        is after the time it started, an absolute timeout still limits it,
+ *        and a timeout never gets shorter, whatever the number of times or
+ *        the order in which the throttle is applied.
  *
  * @sa rd_kafka_broker_bufq_throttle_extend()
  */
 static int rd_ut_throttle_extend(void) {
         /* All times are in seconds from the start of the test, with a
-         * socket.timeout.ms of 60 seconds. */
+         * socket.timeout.ms of 60 seconds. The throttle begins at 40 seconds
+         * and ends at 50, then it is extended to end at 65. */
+        static const int throttle_start_s = 40;
         static const struct {
                 const char *what;
+                int start_s;       /**< The time its timeout started at */
                 int abs_timeout_s; /**< 0: relative socket.timeout.ms */
                 rd_bool_t force;
                 int set_s;  /**< If not 0, timeout set before the throttle */
-                int exp1_s; /**< Timeout after a throttle ending at 10s */
-                int exp2_s; /**< Timeout after a throttle ending at 15s */
+                int exp1_s; /**< Timeout after a throttle ending at 50s */
+                int exp2_s; /**< Timeout after one ending at 65s */
         } cases[] = {
-            /* socket.timeout.ms from the end of the throttle */
-            {"relative", 0, rd_false, 0, 70, 75},
-            {"absolute, further than socket.timeout.ms", 120, rd_false, 0, 70,
-             75},
+            /* 60 seconds from its start, plus the throttle after it:
+             * all of it for a request that started before the throttle, the
+             * rest of it for one that started during it, none for one that
+             * started after it. */
+            {"relative, started before the throttle", 0, 0, rd_false, 0, 70,
+             85},
+            {"relative, started during the throttle", 45, 0, rd_false, 0, 110,
+             125},
+            {"relative, started after the throttle", 55, 0, rd_false, 0, 115,
+             125},
+            {"absolute, further than socket.timeout.ms", 0, 120, rd_false, 0,
+             70, 85},
+            {"absolute, started during the throttle", 45, 200, rd_false, 0, 110,
+             125},
             /* Limited by the absolute timeout */
-            {"absolute, reached by the throttle", 65, rd_false, 0, 65, 65},
-            {"absolute, before the end of the throttle", 5, rd_false, 0, 5, 5},
-            {"absolute, forced", 30, rd_true, 0, 30, 30},
+            {"absolute, reached by the throttle", 0, 65, rd_false, 0, 65, 65},
+            {"absolute, before the throttle", 0, 5, rd_false, 0, 5, 5},
+            {"absolute, forced", 0, 30, rd_true, 0, 30, 30},
             /* Never shorter */
-            {"already later", 0, rd_false, 3600, 3600, 3600},
+            {"already later", 0, 0, rd_false, 3600, 3600, 3600},
         };
         static const struct {
                 const char *what;
-                int until_s;
+                int end_s;
                 rd_bool_t second_exp; /**< Expect cases[].exp2_s */
         } steps[] = {
-            {"a throttle", 10, rd_false},
-            {"the same throttle again", 10, rd_false},
-            {"a shorter throttle", 1, rd_false},
-            {"a longer throttle", 15, rd_true},
+            {"a throttle", 50, rd_false},
+            {"the same throttle again", 50, rd_false},
+            {"a shorter throttle", 45, rd_false},
+            {"a longer throttle", 65, rd_true},
         };
         const rd_ts_t sec = 1000 * 1000;
         rd_kafka_conf_t *conf;
@@ -7368,8 +7483,14 @@ static int rd_ut_throttle_extend(void) {
                         rd_kafka_buf_set_abs_timeout0(
                             bufs[i], cases[i].abs_timeout_s * 1000, now,
                             cases[i].force);
-                /* As when it is enqueued. */
-                rd_kafka_buf_calc_timeout(rk, bufs[i], now);
+                /* As when it is enqueued at the time its timeout starts. */
+                rd_kafka_buf_calc_timeout(rk, bufs[i],
+                                          now + cases[i].start_s * sec);
+                RD_UT_ASSERT(bufs[i]->rkbuf_ts_timeout_start ==
+                                 now + cases[i].start_s * sec,
+                             "%s request: expected the start of the timeout "
+                             "to be recorded",
+                             cases[i].what);
                 if (cases[i].set_s)
                         bufs[i]->rkbuf_ts_timeout = now + cases[i].set_s * sec;
                 rd_kafka_bufq_enq(&rkbq, bufs[i]);
@@ -7377,7 +7498,8 @@ static int rd_ut_throttle_extend(void) {
 
         for (s = 0; s < RD_ARRAYSIZE(steps); s++) {
                 rd_kafka_broker_bufq_throttle_extend(
-                    rkb, &rkbq, now + steps[s].until_s * sec);
+                    rkb, &rkbq, now + throttle_start_s * sec,
+                    now + steps[s].end_s * sec);
 
                 for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
                         rd_ts_t exp =
@@ -7390,6 +7512,11 @@ static int rd_ut_throttle_extend(void) {
                             "timeout at %" PRId64 "ms, got %" PRId64 "ms",
                             cases[i].what, steps[s].what, (exp - now) / 1000,
                             (bufs[i]->rkbuf_ts_timeout - now) / 1000);
+                        RD_UT_ASSERT(bufs[i]->rkbuf_ts_timeout_start ==
+                                         now + cases[i].start_s * sec,
+                                     "%s request, after %s: the start of the "
+                                     "timeout must not change",
+                                     cases[i].what, steps[s].what);
                 }
         }
 

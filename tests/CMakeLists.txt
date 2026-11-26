@@ -171,6 +171,8 @@ set(
     0192-cgrp_static_session_timeout_mock.c
     0193-produce_throttle_mock.c
     0194-produce_throttle.c
+    0195-fetch_throttle_mock.c
+    0196-fetch_throttle.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

@@ -763,6 +763,9 @@ struct rd_kafka_mock_cluster_s {
 rd_kafka_buf_t *rd_kafka_mock_buf_new_response(const rd_kafka_buf_t *request);
 void rd_kafka_mock_buf_write_ThrottleTime(rd_kafka_mock_connection_t *mconn,
                                           rd_kafka_buf_t *resp);
+int rd_kafka_mock_connection_request_throttle(rd_kafka_mock_connection_t *mconn,
+                                              int32_t CorrId,
+                                              rd_bool_t remove);
 
 #define rd_kafka_mock_connection_send_response(mconn, resp)                    \
         rd_kafka_mock_connection_send_response0(mconn, resp, rd_false)

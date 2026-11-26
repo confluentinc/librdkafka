@@ -182,6 +182,18 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         rd_ts_t rkb_ts_fetch_backoff;
         int rkb_fetching;
 
+        rd_atomic64_t rkb_ts_throttle_until; /* KIP-219: rd_clock() time until
+                                              * which the broker throttled this
+                                              * client. Set by the main and
+                                              * broker threads from the
+                                              * ThrottleTimeMs of the response,
+                                              * but not for versions older than
+                                              * the KIP-219 boundary of that
+                                              * request type. Only moves
+                                              * forward, reset when the nodename
+                                              * changes. Written with rkb_lock
+                                              * held, read without it. */
+
         rd_kafka_broker_state_t rkb_state; /**< Current broker state */
 
         rd_ts_t rkb_ts_state;                 /* Timestamp of last
@@ -854,6 +866,24 @@ void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers);
 
 void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
                                                const char *reason);
+
+void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
+                              int16_t ApiKey,
+                              int16_t ApiVersion,
+                              int connect_epoch,
+                              int throttle_time_ms);
+
+/**
+ * @returns the absolute time until which the broker has throttled this client,
+ *          or 0 if it has not. A time in the past means the throttle time has
+ *          passed.
+ *
+ * @locality any
+ */
+static RD_INLINE RD_UNUSED rd_ts_t
+rd_kafka_broker_throttle_until(rd_kafka_broker_t *rkb) {
+        return (rd_ts_t)rd_atomic64_get(&rkb->rkb_ts_throttle_until);
+}
 
 int unittest_broker(void);
 

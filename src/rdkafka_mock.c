@@ -2756,8 +2756,7 @@ rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
                                            ...) {
         rd_kafka_mock_broker_t *mrkb;
         rd_kafka_mock_throttle_t *thr;
-        va_list ap;
-        int *throttles;
+        va_list ap, ap2;
         size_t i;
 
         /* The request type must be one the mock cluster handles, else
@@ -2769,12 +2768,15 @@ rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
         if (cnt == 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        throttles = rd_alloca(sizeof(*throttles) * cnt);
+        /* Check all the throttle times before storing any, so that an
+         * invalid one leaves the throttles of the broker as they were.
+         * The arguments are read again from a copy when storing them. */
         va_start(ap, cnt);
+        va_copy(ap2, ap);
         for (i = 0; i < cnt; i++) {
-                throttles[i] = va_arg(ap, int);
-                if (throttles[i] < 0) {
+                if (va_arg(ap, int) < 0) {
                         va_end(ap);
+                        va_end(ap2);
                         return RD_KAFKA_RESP_ERR__INVALID_ARG;
                 }
         }
@@ -2784,6 +2786,7 @@ rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
 
         if (!(mrkb = rd_kafka_mock_broker_find(mcluster, broker_id))) {
                 mtx_unlock(&mcluster->lock);
+                va_end(ap2);
                 return RD_KAFKA_RESP_ERR__UNKNOWN_BROKER;
         }
 
@@ -2792,9 +2795,10 @@ rd_kafka_mock_broker_push_request_throttle(rd_kafka_mock_cluster_t *mcluster,
         for (i = 0; i < cnt; i++) {
                 thr              = rd_calloc(1, sizeof(*thr));
                 thr->ApiKey      = ApiKey;
-                thr->throttle_ms = throttles[i];
+                thr->throttle_ms = va_arg(ap2, int);
                 TAILQ_INSERT_TAIL(&mrkb->throttles, thr, link);
         }
+        va_end(ap2);
 
         mtx_unlock(&mcluster->lock);
 

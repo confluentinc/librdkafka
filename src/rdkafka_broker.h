@@ -193,6 +193,18 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                               * forward, reset when the nodename
                                               * changes. Written with rkb_lock
                                               * held, read without it. */
+        rd_ts_t rkb_ts_throttle_start;       /* KIP-219: rd_clock() time the
+                                              * throttle ending at
+                                              * rkb_ts_throttle_until began:
+                                              * when a throttle time was
+                                              * recorded while the client was
+                                              * not throttled. Kept when the
+                                              * end is extended, reset when
+                                              * the nodename changes.
+                                              * Protected by rkb_lock, read
+                                              * with the end by
+                                              * rd_kafka_broker_throttle_window().
+                                              */
 
         rd_kafka_broker_state_t rkb_state; /**< Current broker state */
 
@@ -870,7 +882,7 @@ void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
 void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
                               int16_t ApiKey,
                               int16_t ApiVersion,
-                              int connect_epoch,
+                              int nodename_epoch,
                               int throttle_time_ms);
 
 /**

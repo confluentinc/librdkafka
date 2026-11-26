@@ -9,17 +9,10 @@
 
 * Issues: #5665.
   While no broker could be reached, the client could reconnect at a flat rate
-  of several connections per second instead of backing off up to
-  `reconnect.backoff.max.ms`: a broker connection being needed reset the
-  reconnect backoff to an immediate reconnect, and since 2.16.0 the backoff was
-  also lost each time a re-bootstrap sequence re-created the broker objects.
-  The backoff is now kept for the endpoint (node id and `host:port`) when a
-  broker object is removed and continued by the next one added for it, a
-  needed connection no longer skips the backoff, the backoff doubles once per
-  connection attempt (it could quadruple before), and it starts afresh when a
-  broker moves to a different host. It's still reset only once the next
-  allowed reconnect is more than `reconnect.backoff.max.ms` in the past, so a
-  connection that closes soon after being established stays paced.
+  instead of backing off up to `reconnect.backoff.max.ms`: a needed connection
+  skipped the backoff and, since 2.16.0, each re-bootstrap sequence re-created
+  the brokers without it. The backoff is now kept when a broker is re-created
+  for the same endpoint, and a needed connection no longer skips it.
   Happening since 1.5.0, more often since 2.16.0 (#5695).
 
 ### Admin fixes

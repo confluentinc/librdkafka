@@ -1289,6 +1289,36 @@ rd_kafka_buf_finalize_arraycnt(rd_kafka_buf_t *rkbuf, size_t of, size_t cnt) {
 
 
 /**
+ * @brief Write a null array count to the position returned from
+ *        rd_kafka_buf_write_arraycnt_pos().
+ *
+ * Update int32_t in buffer at offset 'of' to -1 for standard arrays, or
+ * to the single byte 0 (CompactArray null) if the \p rkbuf is marked as
+ * FLEXVER, erasing the remaining bytes of the reserved i32.
+ *
+ * @remark For flexibleVersions this will shrink the buffer and move data
+ *         and may thus be costly.
+ */
+static RD_INLINE void rd_kafka_buf_finalize_arraycnt_null(rd_kafka_buf_t *rkbuf,
+                                                          size_t of) {
+        const char null_cnt = 0;
+        size_t r;
+
+        if (!(rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)) {
+                rd_kafka_buf_update_i32(rkbuf, of, -1);
+                return;
+        }
+
+        /* CompactArray has a base of 1, 0 is for Null arrays */
+        rd_buf_write_update(&rkbuf->rkbuf_buf, of, &null_cnt, sizeof(null_cnt));
+
+        r = rd_buf_erase(&rkbuf->rkbuf_buf, of + sizeof(null_cnt),
+                         sizeof(int32_t) - sizeof(null_cnt));
+        rd_assert(r == sizeof(int32_t) - sizeof(null_cnt));
+}
+
+
+/**
  * Write int64_t to buffer.
  * The value will be endian-swapped before write.
  */

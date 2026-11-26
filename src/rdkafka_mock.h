@@ -230,7 +230,10 @@ rd_kafka_mock_broker_push_request_error_rtts(rd_kafka_mock_cluster_t *mcluster,
  *
  * @remark A request without a response does not mute the connection, its
  *         entry is consumed.
- * @remark A throttled Fetch still returns data, unlike an actual broker.
+ * @remark A throttled Fetch is answered as an Apache Kafka broker does, with
+ *         an empty response that has no topic, whatever the partitions have.
+ *         It is sent after the MaxWait of the request, as when the broker has
+ *         no data, if they had no data to return.
  *
  * @returns \c RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          \c RD_KAFKA_RESP_ERR__UNKNOWN_BROKER if there is no such broker,

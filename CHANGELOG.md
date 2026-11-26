@@ -7,6 +7,14 @@
 * Fix the bundled zlib being built without optimisation, which slowed down
   gzip compression in self-contained builds. Happening since 1.4.0 (#5673).
 
+* Issues: #5665.
+  While no broker could be reached, the client could reconnect at a flat rate
+  instead of backing off up to `reconnect.backoff.max.ms`: a needed connection
+  skipped the backoff and, since 2.16.0, each re-bootstrap sequence re-created
+  the brokers without it. The backoff is now kept when a broker is re-created
+  for the same endpoint, and a needed connection no longer skips it.
+  Happening since 1.5.0, more often since 2.16.0 (#5695).
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

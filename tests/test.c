@@ -317,6 +317,8 @@ _TEST_DECL(0187_legacy_msgset_fetch_mock);
 _TEST_DECL(0190_share_consumer_telemetry);
 _TEST_DECL(0191_ipv6_nodename_mock);
 _TEST_DECL(0192_cgrp_static_session_timeout_mock);
+_TEST_DECL(0193_produce_throttle_mock);
+_TEST_DECL(0194_produce_throttle);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -618,6 +620,8 @@ struct test tests[] = {
           TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0191_ipv6_nodename_mock, TEST_F_LOCAL),
     _TEST(0192_cgrp_static_session_timeout_mock, TEST_F_LOCAL),
+    _TEST(0193_produce_throttle_mock, TEST_F_LOCAL),
+    _TEST(0194_produce_throttle, 0, TEST_BRKVER(3, 0, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

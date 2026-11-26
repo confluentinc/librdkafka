@@ -2156,7 +2156,7 @@ static int rd_kafka_req_response(rd_kafka_broker_t *rkb,
          * its throttle time must not be applied, see
          * rd_kafka_broker_throttle().
          * rkb_connect_epoch is only written by the broker thread. */
-        rkbuf->rkbuf_connect_epoch = rkb->rkb_connect_epoch;
+        rkbuf->rkbuf_nodename_epoch = rkb->rkb_connect_epoch;
 
         /* Set up response reader slice starting past the response header */
         rd_slice_init(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf,
@@ -6889,7 +6889,7 @@ void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
 void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
                               int16_t ApiKey,
                               int16_t ApiVersion,
-                              int connect_epoch,
+                              int nodename_epoch,
                               int throttle_time_ms) {
         rd_ts_t until;
         rd_bool_t stale;
@@ -6908,7 +6908,7 @@ void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
          * throttle time never overwrites a longer one. The readers don't take
          * the lock. */
         rd_kafka_broker_lock(rkb);
-        stale = connect_epoch != rkb->rkb_nodename_epoch;
+        stale = nodename_epoch != rkb->rkb_nodename_epoch;
         if (!stale &&
             (rd_ts_t)rd_atomic64_get(&rkb->rkb_ts_throttle_until) < until)
                 rd_atomic64_set(&rkb->rkb_ts_throttle_until, until);

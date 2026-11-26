@@ -1040,7 +1040,7 @@ void rd_kafka_op_throttle_time(rd_kafka_broker_t *rkb,
 
                 rd_kafka_broker_throttle(rkb, rkbuf->rkbuf_reqhdr.ApiKey,
                                          rkbuf->rkbuf_reqhdr.ApiVersion,
-                                         rkbuf->rkbuf_connect_epoch,
+                                         rkbuf->rkbuf_nodename_epoch,
                                          throttle_time);
         }
 

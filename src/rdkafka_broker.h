@@ -870,7 +870,7 @@ void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
 void rd_kafka_broker_throttle(rd_kafka_broker_t *rkb,
                               int16_t ApiKey,
                               int16_t ApiVersion,
-                              int connect_epoch,
+                              int nodename_epoch,
                               int throttle_time_ms);
 
 /**

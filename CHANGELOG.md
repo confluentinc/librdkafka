@@ -63,6 +63,15 @@
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
 
+* Fix a crash when a Fetch response reports a leader change (KIP-951)
+  without a valid leader for some of a topic's partitions, and skip
+  negative partition ids in leader change updates (#5280).
+
+* Fix `rd_kafka_query_watermark_offsets()`, `rd_kafka_offsets_for_times()`,
+  `ListOffsets` and `DeleteRecords` using the leader epoch of another
+  partition, or reading past the cached partitions, when a topic's
+  partition ids in the metadata are not contiguous.
+
 
 # librdkafka v2.16.0
 

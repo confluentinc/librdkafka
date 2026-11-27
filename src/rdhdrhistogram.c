@@ -73,7 +73,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#if HAVE_FENV
 #include <fenv.h>
+#endif
 
 #include "rdhdrhistogram.h"
 #include "rdunittest.h"
@@ -662,11 +664,15 @@ static int ut_unitmagnitude_overflow(void) {
         rd_hdr_histogram_t *hdr;
         int r;
 
+#if HAVE_FENV
         feclearexcept(FE_DIVBYZERO | FE_INVALID);
+#endif
         hdr = rd_hdr_histogram_new(0, 200, 4);
+#if HAVE_FENV
         RD_UT_ASSERT(
             !fetestexcept(FE_DIVBYZERO | FE_INVALID),
             "rd_hdr_histogram_new(0,...) raised an FP exception (#4949)");
+#endif
 
         r = rd_hdr_histogram_record(hdr, 11);
         RD_UT_ASSERT(r, "record(11) failed\n");

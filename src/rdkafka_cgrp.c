@@ -7185,7 +7185,21 @@ static void rd_kafka_cgrp_consumer_assignment_done(rd_kafka_cgrp_t *rkcg) {
                  * to intermediate state. In this scenario, last leave call is
                  * done from here.
                  */
-                not_in_group |= rd_kafka_cgrp_leave_maybe(rkcg);
+                if (rd_kafka_cgrp_leave_maybe(rkcg)) {
+                        /* The member has left the group: as
+                         * rd_kafka_cgrp_consumer_rejoin() does after its
+                         * leave, reset the member and go back to INIT, so the
+                         * next heartbeat is a full (re-)join and a
+                         * subscription made while the leave is in flight is
+                         * applied. Staying in STEADY at epoch 0 would send a
+                         * partial heartbeat, which the coordinator rejects
+                         * with INVALID_REQUEST, or never apply that
+                         * subscription. */
+                        rd_kafka_cgrp_consumer_reset(rkcg);
+                        rd_kafka_cgrp_set_join_state(
+                            rkcg, RD_KAFKA_CGRP_JOIN_STATE_INIT);
+                        not_in_group = rd_true;
+                }
 
                 /* Check if cgrp is trying to terminate, which is safe to do
                  * in these two states. Otherwise we'll need to wait for

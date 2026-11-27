@@ -271,6 +271,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
 
         rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);
+        rd_atomic32_init(&rktp->rktp_reqs_inflight, 0);
         rd_kafka_pid_reset(&rktp->rktp_eos.pid);
 
         /* Consumer: If statistics is available we query the log start offset

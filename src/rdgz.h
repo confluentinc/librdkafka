@@ -32,15 +32,18 @@
 /**
  * Simple gzip decompression returning the inflated data
  * in a malloced buffer.
- * '*decompressed_lenp' must be 0 if the length of the uncompressed data
- * is not known in which case it will be calculated.
+ * 'compressed' must hold one complete gzip or zlib stream that inflates
+ * to at most 'max_len' bytes, else NULL is returned: then
+ * '*decompressed_lenp' is more than 'max_len' if the stream inflates to
+ * more than that.
  * The returned buffer is nul-terminated (the actual allocated length
- * is '*decompressed_lenp'+1.
+ * is '*decompressed_lenp'+1).
  *
  * The decompressed length is returned in '*decompressed_lenp'.
  */
 void *rd_gz_decompress(const void *compressed,
-                       int compressed_len,
-                       uint64_t *decompressed_lenp);
+                       size_t compressed_len,
+                       size_t max_len,
+                       size_t *decompressed_lenp);
 
 #endif /* _RDGZ_H_ */

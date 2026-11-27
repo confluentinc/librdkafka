@@ -2872,24 +2872,27 @@ static int do_test_reconnect_backoff_renamed_broker_resolve_cb(
  *        Broker 2, the partition leader, refuses connections while broker 1
  *        is up, then is advertised as DO_TEST_RENAMED_BROKER_HOST: its first
  *        attempt to the new host must come sooner than the old backoff
- *        allows.
+ *        allows. With \p rename_back it's then renamed back, and must wait
+ *        for the old host's reconnect time.
  */
-static void do_test_reconnect_backoff_renamed_broker(void) {
+static void do_test_reconnect_backoff_renamed_broker(rd_bool_t rename_back) {
         /* A last wait of 1.8-3.6s before the rename leaves time to rename
          * broker 2 before its reconnect time, on a busy machine too. */
         const int backoff_ms = 300, backoff_max_ms = 10000;
         const int attempts_before     = 5;
         const char *debug_contexts[2] = {"broker", NULL};
         char bootstrap_servers[128], broker2_name[128], renamed_name[128];
+        char broker2_host[64];
         const char *bootstraps, *broker2;
         const struct rd_kafka_metadata *metadata;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         int64_t ts[64], abs_timeout, t_rename, t_last, gap_last, first_new;
+        int64_t t_back = 0, first_back = 0;
         int broker2_port, cnt;
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("%s", rename_back ? "renamed back" : "renamed");
 
         mcluster = test_mock_cluster_new(2, &bootstraps);
         broker2  = strchr(bootstraps, ',') + 1;
@@ -2899,6 +2902,8 @@ static void do_test_reconnect_backoff_renamed_broker(void) {
                     sizeof(reconnect_refused_nodename), "%s", broker2);
         rd_snprintf(broker2_name, sizeof(broker2_name), "%s/2", broker2);
         broker2_port = atoi(strrchr(broker2, ':') + 1);
+        rd_snprintf(broker2_host, sizeof(broker2_host), "%.*s",
+                    (int)(strrchr(broker2, ':') - broker2), broker2);
         rd_snprintf(renamed_name, sizeof(renamed_name), "%s:%d/2",
                     DO_TEST_RENAMED_BROKER_HOST, broker2_port);
         rd_kafka_mock_topic_create(mcluster, "renamed", 1, 1);
@@ -2945,6 +2950,27 @@ static void do_test_reconnect_backoff_renamed_broker(void) {
                                        0, ts, RD_ARRAYSIZE(ts));
         } while (cnt < 1 && test_clock() < abs_timeout);
 
+        if (rename_back && cnt >= 1) {
+                t_back = test_clock();
+                rd_kafka_mock_broker_set_host_port(mcluster, 2, broker2_host,
+                                                   broker2_port);
+                TEST_CALL_ERR__(
+                    rd_kafka_metadata(rk, 1, NULL, &metadata, 5000));
+                rd_kafka_metadata_destroy(metadata);
+                /* The first message may be delivered: connect again. */
+                TEST_CALL_ERR__(rd_kafka_producev(
+                    rk, RD_KAFKA_V_TOPIC("renamed"), RD_KAFKA_V_VALUE("2", 1),
+                    RD_KAFKA_V_END));
+                abs_timeout = test_clock() + 20 * 1000 * 1000;
+                do {
+                        rd_kafka_poll(rk, 10);
+                        if (reconnect_ev_get(RECONNECT_EV_ATTEMPT, broker2_name,
+                                             t_back, 0, ts,
+                                             RD_ARRAYSIZE(ts)) >= 1)
+                                first_back = ts[0];
+                } while (!first_back && test_clock() < abs_timeout);
+        }
+
         rd_kafka_purge(rk, RD_KAFKA_PURGE_F_QUEUE | RD_KAFKA_PURGE_F_INFLIGHT);
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(mcluster);
@@ -2980,6 +3006,28 @@ static void do_test_reconnect_backoff_renamed_broker(void) {
                     (int64_t)(gap_last * 0.75) / 1000,
                     (first_new - t_last) / 1000);
 
+        if (rename_back) {
+                TEST_ASSERT(first_back,
+                            "Expected a connection attempt to %s after "
+                            "renaming it back",
+                            broker2_name);
+                TEST_SAY("%s: renamed back after %" PRId64
+                         "ms, first attempt after %" PRId64 "ms\n",
+                         broker2_name, (t_back - t_last) / 1000,
+                         (first_back - t_last) / 1000);
+                TEST_ASSERT((t_back - t_last) < (int64_t)(gap_last * 0.75),
+                            "Renamed back too late (%" PRId64
+                            "ms after the last attempt) to tell whether the "
+                            "old host's backoff is continued",
+                            (t_back - t_last) / 1000);
+                TEST_ASSERT(first_back - t_last >= (int64_t)(gap_last * 0.75),
+                            "Expected the broker renamed back to wait for the "
+                            "old host's reconnect time (at least %" PRId64
+                            "ms after its last attempt), got %" PRId64 "ms",
+                            (int64_t)(gap_last * 0.75) / 1000,
+                            (first_back - t_last) / 1000);
+        }
+
         reconnect_ev_destroy();
         rd_free(log_interceptor);
         log_interceptor = NULL;
@@ -3011,7 +3059,8 @@ int main_0151_purge_brokers_mock(int argc, char **argv) {
 
         do_test_cluster_roll();
 
-        do_test_reconnect_backoff_renamed_broker();
+        do_test_reconnect_backoff_renamed_broker(rd_false);
+        do_test_reconnect_backoff_renamed_broker(rd_true);
 
         do_test_remove_then_add();
 

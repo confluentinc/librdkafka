@@ -264,6 +264,8 @@
     <ClCompile Include="..\..\tests\0192-cgrp_static_session_timeout_mock.c" />
     <ClCompile Include="..\..\tests\0193-produce_throttle_mock.c" />
     <ClCompile Include="..\..\tests\0194-produce_throttle.c" />
+    <ClCompile Include="..\..\tests\0195-fetch_throttle_mock.c" />
+    <ClCompile Include="..\..\tests\0196-fetch_throttle.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

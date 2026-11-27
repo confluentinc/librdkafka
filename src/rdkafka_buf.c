@@ -363,6 +363,8 @@ void rd_kafka_bufq_dump(rd_kafka_broker_t *rkb,
 void rd_kafka_buf_calc_timeout(const rd_kafka_t *rk,
                                rd_kafka_buf_t *rkbuf,
                                rd_ts_t now) {
+        rkbuf->rkbuf_ts_timeout_start = now;
+
         if (likely(rkbuf->rkbuf_rel_timeout)) {
                 /* Default:
                  * Relative timeout, set request timeout to

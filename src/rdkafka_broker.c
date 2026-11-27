@@ -60,6 +60,9 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_telemetry.h"
 #include "rdkafka_transport.h"
+#if WITH_TLS
+#include "rdkafka_tls.h"
+#endif
 #include "rdkafka_proto.h"
 #include "rdkafka_buf.h"
 #include "rdkafka_request.h"
@@ -943,7 +946,8 @@ static int rd_kafka_broker_bufq_purge_by_toppar(rd_kafka_broker_t *rkb,
                     /* Skip partially sent buffers and let them transmit.
                      * The alternative would be to kill the connection here,
                      * which is more drastic and costly. */
-                    rd_slice_offset(&rkbuf->rkbuf_reader) > 0)
+                    rd_kafka_transport_request_has_started(
+                        rkb->rkb_transport, &rkbuf->rkbuf_reader))
                         continue;
 
                 rd_kafka_bufq_deq(rkbq, rkbuf);
@@ -1000,7 +1004,9 @@ restart:
                 if (ApiKey != -1 && rkbuf->rkbuf_reqhdr.ApiKey != ApiKey)
                         continue;
 
-                if (partial_cntp && rd_slice_offset(&rkbuf->rkbuf_reader) > 0)
+                if (partial_cntp &&
+                    rd_kafka_transport_request_has_started(
+                        rkb->rkb_transport, &rkbuf->rkbuf_reader))
                         (*partial_cntp)++;
 
                 /* Convert rkbuf_ts_sent to elapsed time since request */
@@ -5350,15 +5356,22 @@ static int rd_kafka_broker_thread_main(void *arg) {
                 }
 
                 if (rd_kafka_broker_or_instance_terminating(rkb)) {
+                        int partial_cnt = 0;
                         /* Handle is terminating: fail the send+retry queue
                          * to speed up termination, otherwise we'll
                          * need to wait for request timeouts. */
                         r = rd_kafka_broker_bufq_timeout_scan(
-                            rkb, 0, &rkb->rkb_outbufs, NULL, -1,
+                            rkb, 0, &rkb->rkb_outbufs, &partial_cnt, -1,
                             rd_kafka_broker_destroy_error(rk), 0, NULL, 0);
                         r += rd_kafka_broker_bufq_timeout_scan(
                             rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
                             rd_kafka_broker_destroy_error(rk), 0, NULL, 0);
+                        if (partial_cnt)
+                                rd_kafka_broker_fail(
+                                    rkb, LOG_DEBUG,
+                                    rd_kafka_broker_destroy_error(rk),
+                                    "Discarding partially sent request "
+                                    "during termination");
                         rd_rkb_dbg(
                             rkb, BROKER, "TERMINATE",
                             "Handle is terminating in state %s: "
@@ -5416,14 +5429,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
                 rd_kafka_wrunlock(rkb->rkb_rk);
         }
 
-#if WITH_SSL
-        /* Remove OpenSSL per-thread error state to avoid memory leaks */
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
-        /*(OpenSSL libraries handle thread init and deinit)
-         * https://github.com/openssl/openssl/pull/1048 */
-#elif OPENSSL_VERSION_NUMBER >= 0x10000000L
-        ERR_remove_thread_state(NULL);
-#endif
+#if WITH_TLS
+        rd_kafka_tls_thread_term();
 #endif
 
         rd_kafka_interceptors_on_thread_exit(rk, RD_KAFKA_THREAD_BROKER);

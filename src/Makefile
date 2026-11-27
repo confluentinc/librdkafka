@@ -20,6 +20,8 @@ SRCS_$(WITH_ZLIB) += rdgz.c
 SRCS_$(WITH_ZSTD) += rdkafka_zstd.c
 SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
+SRCS_$(WITH_RUSTLS) += rdkafka_rustls.c
+SRCS_y += rdkafka_tls.c
 SRCS_$(WITH_CURL) += rdhttp.c
 SRCS_$(WITH_OAUTHBEARER_OIDC) += rdkafka_sasl_oauthbearer_oidc.c
 
@@ -75,15 +77,21 @@ all: lib check
 
 include ../mklove/Makefile.base
 
+ifeq ($(MKL_NO_SHARED_LIB),y)
+CHECK_FILES+= $(LIBNAME).a
+else
 CHECK_FILES+= $(LIBFILENAME) $(LIBNAME).a
+endif
 
 file-check: lib
 check: file-check
+ifneq ($(MKL_NO_SHARED_LIB),y)
 	@(printf "%-30s " "Symbol visibility" ; \
 		(($(SYMDUMPER) $(LIBFILENAME) | grep rd_kafka_new >/dev/null) && \
 		($(SYMDUMPER) $(LIBFILENAME) | grep -v rd_kafka_destroy >/dev/null) && \
 		printf "$(MKL_GREEN)OK$(MKL_CLR_RESET)\n") || \
 		printf "$(MKL_RED)FAILED$(MKL_CLR_RESET)\n")
+endif
 
 install: lib-install
 uninstall: lib-uninstall

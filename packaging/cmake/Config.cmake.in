@@ -19,6 +19,13 @@ if(@WITH_ZSTD@)
   endif()
 endif()
 
+if(@WITH_RUSTLS@)
+  # This static librdkafka contains no rustls-ffi. The application must link
+  # rustls-ffi 0.15.7 as a Rust dependency and install a rustls crypto
+  # provider as the process default before it creates a TLS client.
+  set(RdKafka_RUSTLS_REQUIRES_APPLICATION_RUSTLS_FFI "0.15.7")
+endif()
+
 if(@WITH_SSL@)
   if(@WITH_BUNDLED_SSL@)
     # TODO: custom SSL library should be installed

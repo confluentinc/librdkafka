@@ -1,0 +1,32 @@
+# Test/runtime configuration TEMPLATE; this is not a validated installation.
+# Replace @FIPS_MODULE_CONFIG@ with your vendor-installed fipsmodule.cnf path.
+# The included file must define [fips_sect] and all vendor-required integrity
+# data. Adapt section names only according to the module's installation guide.
+# Fedora's openssl-libs package uses /etc/pki/tls/fips_local.cnf, but its module
+# identity and qualification must be assessed separately from OpenSSL CMVP #5586.
+# Keep this file outside the checkout when it contains deployment-specific paths.
+openssl_conf = rd_kafka_fips_init
+.include @FIPS_MODULE_CONFIG@
+
+[rd_kafka_fips_init]
+providers = rd_kafka_fips_providers
+
+[rd_kafka_fips_providers]
+base = rd_kafka_base
+fips = fips_sect
+
+[rd_kafka_base]
+activate = 1
+
+[fips_sect]
+activate = 1
+security-checks = 1
+tls1-prf-ems-check = 1
+signature-digest-check = 1
+hkdf-digest-check = 1
+tls13-kdf-digest-check = 1
+tls1-prf-digest-check = 1
+rsa-pss-saltlen-check = 1
+hkdf-key-check = 1
+tls13-kdf-key-check = 1
+tls1-prf-key-check = 1

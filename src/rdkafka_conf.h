@@ -266,8 +266,14 @@ struct rd_kafka_conf_s {
         rd_kafka_metadata_recovery_strategy_t metadata_recovery_strategy;
 
         struct {
+                void *tls_ctx; /**< Immutable backend configuration */
+                int fips_mode; /**< 0: disabled, 1: required */
+                char *fips_config; /**< OpenSSL isolated provider config */
 #if WITH_SSL
                 SSL_CTX *ctx;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+                OSSL_LIB_CTX *lib_ctx;
+#endif
 #endif
                 char *cipher_suites;
                 char *curves_list;

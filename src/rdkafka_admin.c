@@ -6443,6 +6443,13 @@ void rd_kafka_AlterUserScramCredentials(
                         }
 
                         if (is_upsert) {
+                                if (rk->rk_conf.ssl.fips_mode) {
+                                        errstr = "SCRAM upsertion is unsupported "
+                                                 "by ssl.fips.mode=required "
+                                                 "at index %" PRIusz;
+                                        break;
+                                }
+
 #if !WITH_SSL
                                 errstr =
                                     "OpenSSL required for upsertion at index "

@@ -29,6 +29,9 @@ verdef=$(grep '^#define  *RD_KAFKA_VERSION  *0x' src/rdkafka.h | sed 's/^#define
 mkl_require parseversion hex2str "%d.%d.%d" "$verdef" RDKAFKA_VERSION_STR
 
 
+mkl_option "Feature" TLS_BACKEND "--with-tls-backend=BACKEND" "Broker TLS backend: openssl, rustls, none" "openssl"
+mkl_option "Feature" RUSTLS_INCLUDE_DIR "--with-rustls-include-dir=DIR" "Directory with the rustls-ffi 0.15.7 rustls.h (rustls backend)" ""
+
 mkl_toggle_option "Development" ENABLE_DEVEL "--enable-devel" "Enable development asserts, checks, etc" "n"
 mkl_toggle_option "Development" ENABLE_VALGRIND "--enable-valgrind" "Enable in-code valgrind suppressions" "n"
 
@@ -103,7 +106,44 @@ void foo (void) {
 
     # optional libs
     mkl_check "zlib"
-    mkl_check "libssl"
+    case "$TLS_BACKEND" in
+      openssl) mkl_check "libssl" ;;
+      none) mkl_allvar_set WITH_SSL WITH_SSL n ;;
+      rustls)
+        mkl_allvar_set WITH_SSL WITH_SSL n
+        mkl_allvar_set WITH_RUSTLS WITH_RUSTLS y
+        # Keep this artifact broker-only; do not pull in curl/Kerberos crypto.
+        ENABLE_CURL=n
+        ENABLE_GSSAPI=n
+        # The application links rustls-ffi and installs the provider; a
+        # second rustls-ffi copy here would have its own process default.
+        if [[ -n $RUSTLS_INCLUDE_DIR ]]; then
+          rustls_cflags="-I$RUSTLS_INCLUDE_DIR"
+        elif "$PKG_CONFIG" --exact-version=0.15.7 rustls 2>/dev/null; then
+          rustls_cflags=$("$PKG_CONFIG" --cflags-only-I rustls)
+        else
+          mkl_err "rustls backend requires --with-rustls-include-dir=DIR (the rustls-ffi 0.15.7 crate ships src/rustls.h)"
+          exit 1
+        fi
+        mkl_compile_check rustls_header "" fail CC "$rustls_cflags" '
+#include <rustls.h>
+#if RUSTLS_VERSION_NUMBER != 0x000f0700
+#error Wrong rustls-ffi header version
+#endif
+' || exit 1
+        mkl_mkvar_append rustls CPPFLAGS "$rustls_cflags"
+        # A shared library cannot resolve the application's rustls-ffi on
+        # every platform, so build static libraries only.
+        mkl_mkvar_set rustls MKL_NO_SHARED_LIB y
+        mkl_allvar_set "" MKL_APP_DESC_ONELINE "The Apache Kafka C/C++ library (rustls: the application must link rustls-ffi 0.15.7 as a Rust dependency and install a rustls crypto provider)"
+        ;;
+      *) mkl_err "Unknown TLS backend: $TLS_BACKEND"; exit 1 ;;
+    esac
+    if [[ $WITH_SSL == y || $WITH_RUSTLS == y ]]; then
+      mkl_allvar_set WITH_TLS WITH_TLS y
+    else
+      mkl_allvar_set WITH_TLS WITH_TLS n
+    fi
     mkl_check "libsasl2"
     mkl_check "libzstd"
     mkl_check "libcurl"

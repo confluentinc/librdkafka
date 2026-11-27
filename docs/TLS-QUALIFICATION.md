@@ -1,0 +1,128 @@
+# Qualification boundary and investigation updates
+
+Reviewed 2026-11-22 against starting checkout
+`ad4391a0e433a275f4c07a26f98ad70142b3e3a0`, pinned rustls-ffi 0.15.7, primary
+vendor sources and current CMVP records. This is an experimental engineering
+branch. No Linux, Windows or macOS distribution tuple is declared qualified.
+
+## Scope and checked policy
+
+`ssl.fips.mode=required` supports only broker `security.protocol=ssl` with
+certificate and hostname verification, including required mutual TLS. It
+rejects SASL/plaintext, verification callbacks, engines, caller-selected
+algorithm expressions, PKCS#12, CRLs and trust probing. Admin SCRAM *upsertion*
+is rejected at its client entry point before its request-side cryptographic
+work; describe/delete remain distinct operations. The clientless upsertion
+object constructor retains its existing ordinary behavior, including generating
+an optional salt before a client policy can be supplied. Applications must not
+interpret constructing such an object as an approved service. Ordinary SCRAM
+remains unchanged; its authentication/PBKDF/module-boundary questions are open.
+
+OpenSSL required mode uses a dedicated `OSSL_LIB_CTX`, loads the installed
+configuration, base and fips providers, runs the provider self-test and checks
+status, advertised safety controls, digest provider and private DRBG origin.
+It uses `SSL_CTX_new_ex` with `fips=yes`, TLS 1.2/1.3, AES-GCM, NIST P-curves,
+RSA-PSS/ECDSA signatures and authenticated peers. TLS 1.2 must negotiate extended
+master secret. Reconnect reuses that immutable strict configuration and checks
+provider status; failures never select an ordinary context. Thread-associated
+private-context state is released before context destruction.
+
+Certificate/CA objects are decoded again in the isolated context. File and
+`ssl.key.pem` private keys are decoded/validated using that context and provider.
+Encrypted PEM and PKCS#12 memory parsing can execute crypto before client
+construction; even plaintext EC key decoding may derive a public key. Therefore
+required OpenSSL mode rejects memory PRIVATE_KEY setters in either ordering,
+and refuses keys previously imported outside its strict context. File and
+PEM-string mTLS remain supported. Ordinary OpenSSL setter ownership, immediate
+validation, replacement/clear and config duplication are preserved. Rustls
+strict setters select/check their FIPS provider first; keys imported through an
+ordinary provider before selecting required mode are rejected by provenance.
+
+Rustls required mode uses the crypto provider that the application installed
+as the rustls process default. librdkafka links no rustls-ffi and no crypto
+module, and it never substitutes another provider. It checks provider,
+client-config and completed-connection FIPS status, checks the provider RNG,
+and imports keys and verifies certificates with that same provider. With no
+installed provider, or a provider that does not report FIPS, required
+initialization fails with a named error. The module behind the provider, and
+whether a `fips()` result of true matches a validated configuration, is the
+application's evidence. This branch does not qualify a module by inference from
+a Cargo feature or boolean.
+
+Built-in OIDC is rejected by the SSL-only profile. Curl HTTPS, JWT signing,
+external Kerberos and application token acquisition need separate crypto/trust
+assessment before expanding it. Base64 codec and generic authentication crypto
+were not abstracted because the delivered broker-only rustls profile disables
+those unrelated services.
+
+## Investigation verified and corrected
+
+- The initial source/remotes match the report; origin/master and upstream/master
+  were equal at branch creation. Original checkout was preserved.
+- The pinned manifest requires Rust 1.85 and rustls 0.23.46
+  ([manifest](https://github.com/rustls/rustls-ffi/blob/v0.15.7/librustls/Cargo.toml)).
+  The crypto crates in a product come from the application's lock file, not
+  from librdkafka.
+- CMVP [#5586](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5586)
+  identifies OpenSSL FIPS Provider; the host actually reports a **Red Hat
+  Enterprise Linux OpenSSL FIPS Provider**, version `3.5.9-da9af220b1c05159` from
+  Fedora 43's openssl-libs. Matching version text does not connect this binary
+  to the generic certificate. It supplies runtime test evidence only.
+- The host default provider configuration exposes disabled safety controls;
+  required initialization now refuses that condition. The tested positive
+  configuration comes from the branch template, includes vendor installation
+  data and enables applicable controls. It is loaded per client and does not
+  alter global OpenSSL policy. Older provider versions may not expose newer
+  parameters; the core security check and every applicable advertised control
+  are enforced. The exact module policy still needs an external review.
+- Earlier revisions of this branch linked AWS-LC into librdkafka and tested
+  the aws-lc-fips-sys 0.14.3 snapshot and an exact AWS-LC 4.0.0 source build.
+  That mode is removed; its notes are history and are not evidence for the
+  current backend.
+- For Windows, Microsoft validates the CNG modules (`bcryptprimitives.dll`,
+  CMVP #5410 for Windows 11 22H2 and Windows Server 2022 build
+  10.0.20348.1668), not applications
+  ([Microsoft](https://learn.microsoft.com/en-us/windows/security/security-foundations/certification/fips-140-validation)).
+  `rustls-cng-crypto` 0.1.2 reports FIPS from `BCryptGetFipsAlgorithmMode`.
+  That flag follows the legacy FIPS policy registry value, which Microsoft
+  calls unnecessary since the April 2024 updates (measured on an Azure
+  Windows Server 2022 VM, 2026-11-23). Required mode with this provider
+  therefore needs the legacy policy enabled. See
+  `packaging/rustls/WINDOWS-CHECKS.md`.
+- Runtime and static dependency inspections are distinct. The application
+  binary holds the provider's crypto; an absence of dynamic crypto imports
+  alone does not establish absence of embedded crypto. Complete
+  artifact-specific notices/SBOM and module discovery evidence remain release work.
+
+## Deployment checklist (all needed for a claim)
+
+- [ ] Identify exact module, version, CMVP certificate, security-policy revision,
+      approved services and vendor-supported artifact provenance.
+- [ ] Match OS release/CPU/hardware/linkage to supported operating environments;
+      obtain applicable vendor/assessor evidence for other environments.
+- [ ] Preserve policy source digest, exact compiler/build options, complete
+      dependency lock/feature graph, signed artifacts, hashes and license notices.
+- [ ] Execute the policy's installation, integrity and startup self-test procedure;
+      retain module/config paths, permissions and discovery rules.
+- [ ] Inspect final static link maps plus ELF/Mach-O/PE imports and runtime-loaded
+      modules; verify no second unqualified crypto path is enabled in the product.
+- [ ] Establish key/certificate provenance, import and RNG behavior, enabled TLS
+      parameters and any required per-service approval indicators.
+- [ ] Run positive real-broker TLS/mTLS and negative removal/self-test/configuration
+      controls against the final installed package, without fallback.
+- [ ] Repeat on native Linux, Windows and macOS target tuples and downstream
+      bindings/packages; a configured CI job or cross build is not native execution.
+      Windows x64 engineering runs are in `packaging/rustls/WINDOWS-CHECKS.md`;
+      they are not qualification evidence.
+- [ ] Review SCRAM/PBKDF, OIDC/HTTPS, platform trust, optional auth and all future
+      capabilities before admitting them into the strict scope.
+- [ ] Associate results with the exact released artifact, qualification owner and
+      applicable customer deployment; implement servicing/requalification rules.
+
+For manual validation, begin with the selected vendor policy, not a library
+version string. Use its prescribed installation verification, then the branch
+policy tests and real Kafka command with that module's configuration. Compare
+`readelf -d`, `nm`, the final link map and loaded-module inventory with the
+manifest. Preserve failures as well as positive results. Runtime checks here
+are necessary enforcement mechanisms; this checklist supplies the missing
+artifact/environment evidence they cannot establish.

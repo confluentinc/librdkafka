@@ -33,12 +33,6 @@
 
 #include "rdkafka_sasl.h"
 
-#if WITH_SSL
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/pkcs12.h>
-#endif
-
 #ifndef _WIN32
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -48,8 +42,8 @@ struct rd_kafka_transport_s {
         rd_socket_t rktrans_s;
         rd_kafka_broker_t *rktrans_rkb; /* Not reference counted */
 
-#if WITH_SSL
-        SSL *rktrans_ssl;
+#if WITH_TLS
+        void *rktrans_tls; /**< Owned exclusively by the selected TLS adapter */
 #endif
 
 #ifdef _WIN32

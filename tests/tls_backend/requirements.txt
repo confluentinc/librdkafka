@@ -1,0 +1,14 @@
+# Tested dependency lock for the acceptance virtual environment.
+certifi==2026.11.20
+cffi==2.1.1
+charset-normalizer==3.5.2
+cryptography==50.0.2
+docker==7.2.0
+idna==3.20
+pycparser==3.12
+python-dotenv==1.2.4
+requests==2.34.2
+testcontainers==4.15.0
+typing_extensions==4.16.0
+urllib3==2.8.0
+wrapt==2.5.2

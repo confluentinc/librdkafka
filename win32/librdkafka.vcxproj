@@ -219,6 +219,7 @@
     <ClCompile Include="..\src\rdkafka_timer.c" />
     <ClCompile Include="..\src\rdkafka_topic.c" />
     <ClCompile Include="..\src\rdkafka_transport.c" />
+    <ClCompile Include="..\src\rdkafka_tls.c" />
     <ClCompile Include="..\src\rdkafka_ssl.c" />
     <ClCompile Include="..\src\rdkafka_cert.c" />
     <ClCompile Include="..\src\rdkafka_buf.c" />

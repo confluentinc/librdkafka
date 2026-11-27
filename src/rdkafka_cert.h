@@ -41,12 +41,17 @@
 typedef struct rd_kafka_cert_s {
         rd_kafka_cert_type_t type;
         rd_kafka_cert_enc_t encoding;
+        int outside_policy_crypto; /**< Import used crypto outside a selected strict context */
         rd_refcnt_t refcnt;
 #if WITH_SSL
         X509 *x509;             /**< Certificate (public key) */
         STACK_OF(X509) * chain; /**< Certificate chain (public key) */
         EVP_PKEY *pkey;         /**< Private key */
         X509_STORE *store;      /**< CA trusted certificates */
+#endif
+#if WITH_RUSTLS
+        char *pem; /**< Owned, validated PEM; immutable and shared on dup. */
+        size_t pem_size;
 #endif
 } rd_kafka_cert_t;
 

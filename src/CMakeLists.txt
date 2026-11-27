@@ -40,6 +40,7 @@ set(
     rdkafka_timer.c
     rdkafka_topic.c
     rdkafka_transport.c
+    rdkafka_tls.c
     rdkafka_interceptor.c
     rdkafka_header.c
     rdkafka_admin.c
@@ -86,6 +87,9 @@ set(
 
 if(WITH_SSL)
   list(APPEND sources rdkafka_ssl.c)
+endif()
+if(WITH_RUSTLS)
+  list(APPEND sources rdkafka_rustls.c)
 endif()
 
 if(WITH_CURL)
@@ -141,6 +145,13 @@ endif()
 # Define flags with cmake instead of by defining them on win32_config.h
 if(WITHOUT_WIN32_CONFIG)
   list(APPEND rdkafka_compile_definitions WITHOUT_WIN32_CONFIG)
+  foreach(tls_flag WITH_TLS WITH_RUSTLS)
+    if(${tls_flag})
+      list(APPEND rdkafka_compile_definitions ${tls_flag}=1)
+    else()
+      list(APPEND rdkafka_compile_definitions ${tls_flag}=0)
+    endif()
+  endforeach()
   if(WITH_SSL)
     list(APPEND rdkafka_compile_definitions WITH_SSL=1)
   else()
@@ -253,6 +264,10 @@ if(WITH_SSL)
   endif()
 endif()
 
+if(WITH_RUSTLS)
+  target_include_directories(rdkafka PRIVATE ${RUSTLS_INCLUDE_DIR})
+endif()
+
 if(LINK_ATOMIC)
   target_link_libraries(rdkafka PUBLIC "-latomic")
 endif()
@@ -306,10 +321,6 @@ else()
   endif()
 endif()
 
-if(NOT RDKAFKA_BUILD_STATIC)
-  set(PKG_CONFIG_NAME "librdkafka")
-  set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
-
   if(WITH_CURL)
     string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libcurl ")
   endif()
@@ -334,6 +345,10 @@ if(NOT RDKAFKA_BUILD_STATIC)
     string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "liblz4 ")
   endif()
 
+if(NOT RDKAFKA_BUILD_STATIC)
+  set(PKG_CONFIG_NAME "librdkafka")
+  set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library")
+
   set(PKG_CONFIG_CFLAGS "-I\${includedir}")
   set(PKG_CONFIG_LIBS "-L\${libdir} -lrdkafka")
 
@@ -349,8 +364,11 @@ if(NOT RDKAFKA_BUILD_STATIC)
 else()
   set(PKG_CONFIG_NAME "librdkafka-static")
   set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static)")
+  if(WITH_RUSTLS)
+    set(PKG_CONFIG_DESCRIPTION "The Apache Kafka C/C++ library (static, rustls: the application must link rustls-ffi 0.15.7 as a Rust dependency and install a rustls crypto provider)")
+  endif()
   set(PKG_CONFIG_CFLAGS "-I\${includedir} -DLIBRDKAFKA_STATICLIB")
-  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/librdkafka.a")
+  set(PKG_CONFIG_LIBS "-L\${libdir} \${libdir}/${CMAKE_STATIC_LIBRARY_PREFIX}rdkafka${CMAKE_STATIC_LIBRARY_SUFFIX}")
   string(APPEND PKG_CONFIG_LIBS " ${PKG_CONFIG_LIBS_PRIVATE}")
   set(PKG_CONFIG_LIBS_PRIVATE "")
   configure_file(

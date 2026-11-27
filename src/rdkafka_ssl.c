@@ -36,6 +36,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_cert.h"
+#include "rdkafka_tls.h"
 #include "rdunittest.h"
 
 #ifdef _WIN32
@@ -45,11 +46,16 @@
 #pragma comment(lib, "libssl.lib")
 #endif
 
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/pkcs12.h>
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
 #include <openssl/provider.h>
+#include <openssl/core_names.h>
+#include <openssl/rand.h>
 #endif
 
 #include <ctype.h>
@@ -70,6 +76,11 @@
 #endif
 
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+static int rd_kafka_ssl_fips_status(rd_kafka_t *rk);
+#endif
+static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans);
+
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static mtx_t *rd_kafka_ssl_locks;
 static int rd_kafka_ssl_locks_cnt;
@@ -80,9 +91,14 @@ static int rd_kafka_ssl_locks_cnt;
  * @brief Close and destroy SSL session
  */
 void rd_kafka_transport_ssl_close(rd_kafka_transport_t *rktrans) {
-        SSL_shutdown(rktrans->rktrans_ssl);
-        SSL_free(rktrans->rktrans_ssl);
-        rktrans->rktrans_ssl = NULL;
+        SSL_shutdown(rktrans->rktrans_tls);
+        SSL_free(rktrans->rktrans_tls);
+        rktrans->rktrans_tls = NULL;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.lib_ctx)
+                OPENSSL_thread_stop_ex(
+                    rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.lib_ctx);
+#endif
 }
 
 
@@ -219,7 +235,7 @@ rd_kafka_transport_ssl_io_update(rd_kafka_transport_t *rktrans,
                                  int ret,
                                  char *errstr,
                                  size_t errstr_size) {
-        int serr = SSL_get_error(rktrans->rktrans_ssl, ret);
+        int serr = SSL_get_error(rktrans->rktrans_tls, ret);
         int serr2;
 
         switch (serr) {
@@ -278,7 +294,7 @@ ssize_t rd_kafka_transport_ssl_send(rd_kafka_transport_t *rktrans,
                 int r;
                 size_t r2;
 
-                r = SSL_write(rktrans->rktrans_ssl, p, (int)rlen);
+                r = SSL_write(rktrans->rktrans_tls, p, (int)rlen);
 
                 if (unlikely(r <= 0)) {
                         if (rd_kafka_transport_ssl_io_update(rktrans, r, errstr,
@@ -316,7 +332,7 @@ ssize_t rd_kafka_transport_ssl_recv(rd_kafka_transport_t *rktrans,
 
                 rd_kafka_transport_ssl_clear_error(rktrans);
 
-                r = SSL_read(rktrans->rktrans_ssl, p, (int)len);
+                r = SSL_read(rktrans->rktrans_tls, p, (int)len);
 
                 if (unlikely(r <= 0)) {
                         if (rd_kafka_transport_ssl_io_update(rktrans, r, errstr,
@@ -528,7 +544,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
         if (!is_ip_literal &&
-            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
+            !SSL_set_tlsext_host_name(rktrans->rktrans_tls, name_for_verify))
                 goto fail;
 #endif
 
@@ -548,7 +564,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         {
                 X509_VERIFY_PARAM *param;
 
-                param = SSL_get0_param(rktrans->rktrans_ssl);
+                param = SSL_get0_param(rktrans->rktrans_tls);
 
                 /* Match an IP literal against the certificate's iPAddress
                  * entries and a hostname against its dNSName entries.
@@ -612,11 +628,20 @@ int rd_kafka_transport_ssl_connect(rd_kafka_broker_t *rkb,
                                    size_t errstr_size) {
         int r;
 
-        rktrans->rktrans_ssl = SSL_new(rkb->rkb_rk->rk_conf.ssl.ctx);
-        if (!rktrans->rktrans_ssl)
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (!rd_kafka_ssl_fips_status(rkb->rkb_rk)) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required provider status failed; "
+                            "connection refused without fallback");
+                return -1;
+        }
+#endif
+
+        rktrans->rktrans_tls = SSL_new(rkb->rkb_rk->rk_conf.ssl.ctx);
+        if (!rktrans->rktrans_tls)
                 goto fail;
 
-        if (!SSL_set_fd(rktrans->rktrans_ssl, (int)rktrans->rktrans_s))
+        if (!SSL_set_fd(rktrans->rktrans_tls, (int)rktrans->rktrans_s))
                 goto fail;
 
         if (rd_kafka_transport_ssl_set_endpoint_id(rktrans, errstr,
@@ -625,10 +650,12 @@ int rd_kafka_transport_ssl_connect(rd_kafka_broker_t *rkb,
 
         rd_kafka_transport_ssl_clear_error(rktrans);
 
-        r = SSL_connect(rktrans->rktrans_ssl);
+        r = SSL_connect(rktrans->rktrans_tls);
         if (r == 1) {
-                /* Connected, highly unlikely since this is a
-                 * non-blocking operation. */
+                /* Even an immediately completed nonblocking handshake must
+                 * pass the same peer and strict-policy verification. */
+                if (rd_kafka_transport_ssl_verify(rktrans) == -1)
+                        return 0; /* verify already failed/destroyed transport */
                 rd_kafka_transport_connect_done(rktrans, NULL);
                 return 0;
         }
@@ -653,7 +680,7 @@ rd_kafka_transport_ssl_io_event(rd_kafka_transport_t *rktrans, int events) {
         if (events & POLLOUT) {
                 rd_kafka_transport_ssl_clear_error(rktrans);
 
-                r = SSL_write(rktrans->rktrans_ssl, NULL, 0);
+                r = SSL_write(rktrans->rktrans_tls, NULL, 0);
                 if (rd_kafka_transport_ssl_io_update(rktrans, r, errstr,
                                                      sizeof(errstr)) == -1)
                         goto fail;
@@ -676,13 +703,27 @@ static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans) {
         long int rl;
         X509 *cert;
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.fips_mode &&
+            (!rd_kafka_ssl_fips_status(rktrans->rktrans_rkb->rkb_rk) ||
+             (SSL_version(rktrans->rktrans_tls) == TLS1_2_VERSION &&
+              !SSL_get_extms_support(rktrans->rktrans_tls)))) {
+                rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
+                                     RD_KAFKA_RESP_ERR__SSL,
+                                     "ssl.fips.mode=required provider status "
+                                     "or TLS 1.2 extended master secret "
+                                     "requirement failed");
+                return -1;
+        }
+#endif
+
         if (!rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.enable_verify)
                 return 0;
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
-        cert = SSL_get1_peer_certificate(rktrans->rktrans_ssl);
+        cert = SSL_get1_peer_certificate(rktrans->rktrans_tls);
 #else
-        cert = SSL_get_peer_certificate(rktrans->rktrans_ssl);
+        cert = SSL_get_peer_certificate(rktrans->rktrans_tls);
 #endif
         X509_free(cert);
         if (!cert) {
@@ -692,7 +733,7 @@ static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans) {
                 return -1;
         }
 
-        if ((rl = SSL_get_verify_result(rktrans->rktrans_ssl)) != X509_V_OK) {
+        if ((rl = SSL_get_verify_result(rktrans->rktrans_tls)) != X509_V_OK) {
                 rd_kafka_broker_fail(rktrans->rktrans_rkb, LOG_ERR,
                                      RD_KAFKA_RESP_ERR__SSL,
                                      "Failed to verify broker certificate: %s",
@@ -717,7 +758,7 @@ int rd_kafka_transport_ssl_handshake(rd_kafka_transport_t *rktrans) {
         char errstr[512];
         int r;
 
-        r = SSL_do_handshake(rktrans->rktrans_ssl);
+        r = SSL_do_handshake(rktrans->rktrans_tls);
         if (r == 1) {
                 /* SSL handshake done. Verify. */
                 if (rd_kafka_transport_ssl_verify(rktrans) == -1)
@@ -1270,6 +1311,180 @@ static int rd_kafka_ssl_cert_callback(SSL *ssl, void *arg) {
         return 1;
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+/* Decode again into the client's library context. Configuration setters may
+ * have parsed these objects before the policy was selected. Never transfer or
+ * modify their shared certificate objects when constructing a strict client. */
+static X509 *rd_kafka_ssl_fips_copy_cert(rd_kafka_t *rk, X509 *source) {
+        unsigned char *der = NULL;
+        const unsigned char *p;
+        int len = i2d_X509(source, &der);
+        X509 *copy = NULL;
+        if (len <= 0)
+                return NULL;
+        p = der;
+        copy = X509_new_ex(rk->rk_conf.ssl.lib_ctx, "fips=yes");
+        if (copy && !d2i_X509(&copy, &p, len)) {
+                X509_free(copy);
+                copy = NULL;
+        }
+        OPENSSL_free(der);
+        return copy;
+}
+
+static X509 *rd_kafka_ssl_fips_read_cert(rd_kafka_t *rk, BIO *bio) {
+        X509 *cert = X509_new_ex(rk->rk_conf.ssl.lib_ctx, "fips=yes");
+        if (cert && !PEM_read_bio_X509(bio, &cert, NULL, NULL)) {
+                X509_free(cert);
+                cert = NULL;
+        }
+        return cert;
+}
+
+static int rd_kafka_ssl_fips_add_ca(rd_kafka_t *rk, SSL_CTX *ctx,
+                                     X509 *source) {
+        X509 *cert = rd_kafka_ssl_fips_copy_cert(rk, source);
+        int ok = cert && X509_STORE_add_cert(SSL_CTX_get_cert_store(ctx), cert);
+        X509_free(cert);
+        return ok;
+}
+
+/* The strict profile deliberately supports explicit trust only. Key decoding,
+ * including PEM decryption, uses fips=yes in the same isolated context as TLS.
+ * ASN.1 encoding below is serialization, not a cryptographic service. */
+static int rd_kafka_ssl_fips_set_certs(rd_kafka_t *rk, SSL_CTX *ctx,
+                                       char *errstr, size_t errstr_size) {
+        rd_kafka_conf_t *conf = &rk->rk_conf;
+        BIO *bio = NULL;
+        EVP_PKEY *key = NULL;
+        X509 *cert = NULL;
+        int i, ok = 0;
+
+        if (conf->ssl.ca) {
+                STACK_OF(X509_OBJECT) *objects =
+                    X509_STORE_get0_objects(conf->ssl.ca->store);
+                int n = sk_X509_OBJECT_num(objects);
+                if (n <= 0)
+                        goto done;
+                for (i = 0; i < n; i++) {
+                        X509 *ca = X509_OBJECT_get0_X509(
+                            sk_X509_OBJECT_value(objects, i));
+                        if (!ca || !rd_kafka_ssl_fips_add_ca(rk, ctx, ca))
+                                goto done;
+                }
+        } else {
+                if (conf->ssl.ca_location &&
+                    !X509_STORE_load_file_ex(SSL_CTX_get_cert_store(ctx),
+                                              conf->ssl.ca_location,
+                                              conf->ssl.lib_ctx, "fips=yes"))
+                        goto done;
+                if (conf->ssl.ca_pem) {
+                        int count = 0;
+                        bio = BIO_new_mem_buf(conf->ssl.ca_pem, -1);
+                        if (!bio)
+                                goto done;
+                        while ((cert = rd_kafka_ssl_fips_read_cert(rk, bio))) {
+                                if (!X509_STORE_add_cert(
+                                        SSL_CTX_get_cert_store(ctx), cert))
+                                        goto done;
+                                X509_free(cert);
+                                cert = NULL;
+                                count++;
+                        }
+                        if (!BIO_eof(bio) || !count)
+                                goto done;
+                        ERR_clear_error();
+                        BIO_free(bio);
+                        bio = NULL;
+                }
+        }
+
+        if (conf->ssl.cert) {
+                cert = rd_kafka_ssl_fips_copy_cert(rk, conf->ssl.cert->x509);
+                if (!cert || !SSL_CTX_use_certificate(ctx, cert))
+                        goto done;
+                X509_free(cert);
+                cert = NULL;
+                for (i = 0; conf->ssl.cert->chain &&
+                            i < sk_X509_num(conf->ssl.cert->chain); i++) {
+                        cert = rd_kafka_ssl_fips_copy_cert(
+                            rk, sk_X509_value(conf->ssl.cert->chain, i));
+                        if (!cert || !SSL_CTX_add1_chain_cert(ctx, cert))
+                                goto done;
+                        X509_free(cert);
+                        cert = NULL;
+                }
+        }
+        if (conf->ssl.cert_location || conf->ssl.cert_pem) {
+                bio = conf->ssl.cert_pem
+                          ? BIO_new_mem_buf(conf->ssl.cert_pem, -1)
+                          : BIO_new_file(conf->ssl.cert_location, "rb");
+                if (!bio || !(cert = rd_kafka_ssl_fips_read_cert(rk, bio)) ||
+                    !SSL_CTX_use_certificate(ctx, cert))
+                        goto done;
+                X509_free(cert);
+                cert = NULL;
+                while ((cert = rd_kafka_ssl_fips_read_cert(rk, bio))) {
+                        if (!SSL_CTX_add1_chain_cert(ctx, cert))
+                                goto done;
+                        X509_free(cert);
+                        cert = NULL;
+                }
+                if (!BIO_eof(bio))
+                        goto done;
+                ERR_clear_error();
+                BIO_free(bio);
+                bio = NULL;
+        }
+
+        if (conf->ssl.key)
+                goto done; /* default-context setter import is not supported */
+        if (conf->ssl.key_location || conf->ssl.key_pem) {
+                EVP_PKEY_free(key);
+                key = NULL;
+                bio = conf->ssl.key_pem
+                          ? BIO_new_mem_buf(conf->ssl.key_pem, -1)
+                          : BIO_new_file(conf->ssl.key_location, "rb");
+                if (!bio)
+                        goto done;
+                key = PEM_read_bio_PrivateKey_ex(
+                    bio, NULL, rd_kafka_transport_ssl_passwd_cb, rk,
+                    conf->ssl.lib_ctx, "fips=yes");
+                BIO_free(bio);
+                bio = NULL;
+                if (!key)
+                        goto done;
+        }
+        if (key) {
+                EVP_PKEY_CTX *keyctx = EVP_PKEY_CTX_new_from_pkey(
+                    conf->ssl.lib_ctx, key, "fips=yes");
+                const OSSL_PROVIDER *provider = EVP_PKEY_get0_provider(key);
+                int valid = keyctx && EVP_PKEY_private_check(keyctx) == 1 &&
+                            provider &&
+                            !strcmp(OSSL_PROVIDER_get0_name(provider), "fips") &&
+                            EVP_PKEY_get_security_bits(key) >= 112;
+                EVP_PKEY_CTX_free(keyctx);
+                if (!valid || !SSL_CTX_use_PrivateKey(ctx, key) ||
+                    !SSL_CTX_check_private_key(ctx))
+                        goto done;
+        } else if (conf->ssl.cert || conf->ssl.cert_location ||
+                   conf->ssl.cert_pem) {
+                goto done;
+        }
+        SSL_CTX_set_cert_cb(ctx, rd_kafka_ssl_cert_callback, rk);
+        ok = 1;
+done:
+        BIO_free(bio);
+        EVP_PKEY_free(key);
+        X509_free(cert);
+        if (!ok)
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required certificate/key import "
+                            "or private key validation failed: ");
+        return ok ? 0 : -1;
+}
+#endif
+
 /**
  * @brief Registers certificates, keys, etc, on the SSL_CTX
  *
@@ -1283,6 +1498,11 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
         rd_bool_t check_pkey = rd_false;
         int r;
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.fips_mode)
+                return rd_kafka_ssl_fips_set_certs(rk, ctx, errstr, errstr_size);
+#endif
+
         /*
          * ssl_ca, ssl.ca.location, or Windows cert root store,
          * or default paths.
@@ -1292,10 +1512,15 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 rd_kafka_dbg(rk, SECURITY, "SSL",
                              "Loading CA certificate(s) from memory");
 
+                /* Configuration duplicates share immutable certificate objects.
+                 * Give SSL_CTX its own reference instead of stealing theirs. */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+                X509_STORE_up_ref(rk->rk_conf.ssl.ca->store);
+#else
+                CRYPTO_add(&rk->rk_conf.ssl.ca->store->references, 1,
+                           CRYPTO_LOCK_X509_STORE);
+#endif
                 SSL_CTX_set_cert_store(ctx, rk->rk_conf.ssl.ca->store);
-
-                /* OpenSSL takes ownership of the store */
-                rk->rk_conf.ssl.ca->store = NULL;
 
                 ca_probe = rd_false;
 
@@ -1483,16 +1708,13 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                 }
 
                 if (rk->rk_conf.ssl.cert->chain) {
-                        r = SSL_CTX_set0_chain(ctx,
+                        r = SSL_CTX_set1_chain(ctx,
                                                rk->rk_conf.ssl.cert->chain);
                         if (r != 1) {
                                 rd_snprintf(errstr, errstr_size,
                                             "ssl_cert failed: "
                                             "setting certificate chain: ");
                                 return -1;
-                        } else {
-                                /* The chain is now owned by the CTX */
-                                rk->rk_conf.ssl.cert->chain = NULL;
                         }
                 }
         }
@@ -1786,6 +2008,14 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 void rd_kafka_ssl_ctx_term(rd_kafka_t *rk) {
         SSL_CTX_free(rk->rk_conf.ssl.ctx);
         rk->rk_conf.ssl.ctx = NULL;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.lib_ctx) {
+                OPENSSL_thread_stop_ex(rk->rk_conf.ssl.lib_ctx);
+                rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
+                OSSL_LIB_CTX_free(rk->rk_conf.ssl.lib_ctx);
+                rk->rk_conf.ssl.lib_ctx = NULL;
+        }
+#endif
 
 #if WITH_SSL_ENGINE
         RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
@@ -1936,6 +2166,117 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
 
 
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+/* Require all exposed module safety checks used by this TLS profile.
+ * An older module may not expose each newer parameter; the security-checks
+ * control itself is mandatory, and TLS 1.2 EMS is checked on the connection. */
+static int rd_kafka_ssl_fips_provider_checks(OSSL_PROVIDER *provider) {
+        static const char *const checks[] = {
+            "security-checks", "tls1-prf-ems-check", "signature-digest-check",
+            "hkdf-digest-check", "tls13-kdf-digest-check",
+            "tls1-prf-digest-check", "rsa-pss-saltlen-check",
+            "hkdf-key-check", "tls13-kdf-key-check", "tls1-prf-key-check"};
+        const OSSL_PARAM *gettable = OSSL_PROVIDER_gettable_params(provider);
+        size_t i;
+        for (i = 0; i < RD_ARRAYSIZE(checks); i++) {
+                int enabled = -1;
+                OSSL_PARAM params[] = {
+                    OSSL_PARAM_int(checks[i], &enabled), OSSL_PARAM_END};
+                if (i > 0 && (!gettable ||
+                    !OSSL_PARAM_locate_const(gettable, checks[i])))
+                        continue;
+                if (!OSSL_PROVIDER_get_params(provider, params) || enabled != 1)
+                        return 0;
+        }
+        return 1;
+}
+
+/* Strict clients never change the process default context or its properties.
+ * Deployment-installed fipsmodule.cnf integrity data is still mandatory. */
+static int rd_kafka_ssl_fips_ctx_init(rd_kafka_t *rk,
+                                       char *errstr, size_t errstr_size) {
+        OSSL_LIB_CTX *libctx = OSSL_LIB_CTX_new();
+        OSSL_PROVIDER *base = NULL, *fips = NULL;
+        EVP_MD *digest = NULL;
+        EVP_RAND_CTX *rng;
+        unsigned char probe[32];
+        int status = 0;
+        OSSL_PARAM params[] = {
+            OSSL_PARAM_int(OSSL_PROV_PARAM_STATUS, &status), OSSL_PARAM_END};
+
+        if (!libctx || !OSSL_LIB_CTX_load_config(libctx, rk->rk_conf.ssl.fips_config)) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required could not initialize "
+                            "isolated OpenSSL provider configuration: ");
+                goto fail;
+        }
+        base = OSSL_PROVIDER_load(libctx, "base");
+        fips = OSSL_PROVIDER_load(libctx, "fips");
+        if (!base || !fips || !OSSL_PROVIDER_self_test(fips) ||
+            !OSSL_PROVIDER_get_params(fips, params) || status != 1 ||
+            !rd_kafka_ssl_fips_provider_checks(fips) ||
+            !EVP_default_properties_enable_fips(libctx, 1)) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required needs an operational "
+                            "OpenSSL fips provider (load, self-test or status "
+                            "check failed): ");
+                goto fail;
+        }
+        digest = EVP_MD_fetch(libctx, "SHA2-256", "fips=yes");
+        if (!digest ||
+            strcmp(OSSL_PROVIDER_get0_name(EVP_MD_get0_provider(digest)),
+                   "fips") ||
+            RAND_priv_bytes_ex(libctx, probe, sizeof(probe), 256) != 1) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required approved digest or "
+                            "private randomness unavailable: ");
+                goto fail;
+        }
+        OPENSSL_cleanse(probe, sizeof(probe));
+        rng = RAND_get0_private(libctx);
+        if (!rng || strcmp(OSSL_PROVIDER_get0_name(EVP_RAND_get0_provider(
+                                EVP_RAND_CTX_get0_rand(rng))), "fips")) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required private DRBG is not "
+                            "provided by fips");
+                goto fail;
+        }
+        EVP_MD_free(digest);
+        rd_list_init(&rk->rk_conf.ssl.loaded_providers, 2,
+                     rd_kafka_ssl_OSSL_PROVIDER_free);
+        rd_list_add(&rk->rk_conf.ssl.loaded_providers, base);
+        rd_list_add(&rk->rk_conf.ssl.loaded_providers, fips);
+        rk->rk_conf.ssl.lib_ctx = libctx;
+        rd_kafka_dbg(rk, SECURITY, "FIPS",
+                     "OpenSSL isolated fips provider passed initialization, "
+                     "self-test, status and private DRBG checks; "
+                     "deployment qualification remains external");
+        return 0;
+fail:
+        OPENSSL_cleanse(probe, sizeof(probe));
+        EVP_MD_free(digest);
+        OSSL_PROVIDER_unload(fips);
+        OSSL_PROVIDER_unload(base);
+        if (libctx) {
+                OPENSSL_thread_stop_ex(libctx);
+                OSSL_LIB_CTX_free(libctx);
+        }
+        return -1;
+}
+
+static int rd_kafka_ssl_fips_status(rd_kafka_t *rk) {
+        OSSL_PROVIDER *fips;
+        int status = 0;
+        OSSL_PARAM params[] = {
+            OSSL_PARAM_int(OSSL_PROV_PARAM_STATUS, &status), OSSL_PARAM_END};
+        if (!rk->rk_conf.ssl.fips_mode)
+                return 1;
+        fips = rd_list_elem(&rk->rk_conf.ssl.loaded_providers, 1);
+        return fips && OSSL_PROVIDER_get_params(fips, params) && status == 1 &&
+               rd_kafka_ssl_fips_provider_checks(fips);
+}
+#endif
+
 /**
  * @brief Once per rd_kafka_t handle initialization of OpenSSL
  *
@@ -1970,6 +2311,9 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 errstr[0] = '\0';
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.fips_mode &&
+            rd_kafka_ssl_fips_ctx_init(rk, errstr, errstr_size) == -1)
+                goto fail;
         if (rk->rk_conf.ssl.providers &&
             !rd_kafka_ssl_ctx_load_providers(rk, rk->rk_conf.ssl.providers,
                                              errstr, errstr_size))
@@ -1986,7 +2330,13 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         }
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.fips_mode)
+                ctx = SSL_CTX_new_ex(rk->rk_conf.ssl.lib_ctx, "fips=yes",
+                                       TLS_client_method());
+        else
+                ctx = SSL_CTX_new(TLS_client_method());
+#elif OPENSSL_VERSION_NUMBER >= 0x10100000
         ctx = SSL_CTX_new(TLS_client_method());
 #else
         ctx = SSL_CTX_new(SSLv23_client_method());
@@ -1995,6 +2345,41 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 rd_snprintf(errstr, errstr_size, "SSL_CTX_new() failed: ");
                 goto fail;
         }
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.fips_mode) {
+                SSL_CTX_set_security_level(ctx, 2);
+#ifdef SSL_OP_NO_EXTENDED_MASTER_SECRET
+                SSL_CTX_clear_options(ctx, SSL_OP_NO_EXTENDED_MASTER_SECRET);
+#endif
+                SSL_CTX_set_options(ctx, SSL_OP_NO_RENEGOTIATION);
+                if (!SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION) ||
+                    !SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION) ||
+                    !SSL_CTX_set_cipher_list(
+                        ctx, "ECDHE-RSA-AES256-GCM-SHA384:"
+                             "ECDHE-ECDSA-AES256-GCM-SHA384:"
+                             "ECDHE-RSA-AES128-GCM-SHA256:"
+                             "ECDHE-ECDSA-AES128-GCM-SHA256") ||
+                    !SSL_CTX_set_ciphersuites(
+                        ctx, "TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256") ||
+                    !SSL_CTX_set1_groups_list(ctx, "P-256:P-384:P-521") ||
+                    !SSL_CTX_set1_sigalgs_list(
+                        ctx, "rsa_pss_rsae_sha256:rsa_pss_rsae_sha384:"
+                             "rsa_pss_rsae_sha512:ecdsa_secp256r1_sha256:"
+                             "ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512")) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.fips.mode=required TLS algorithm "
+                                    "profile is unavailable: ");
+                        goto fail;
+                }
+        }
+#else
+        if (rk->rk_conf.ssl.fips_mode) {
+                rd_snprintf(errstr, errstr_size,
+                            "ssl.fips.mode=required needs OpenSSL >= 3");
+                goto fail;
+        }
+#endif
 
 #ifdef SSL_OP_NO_SSLv3
         /* Disable SSLv3 (unsafe) */
@@ -2071,6 +2456,10 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 
         rk->rk_conf.ssl.ctx = ctx;
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.lib_ctx)
+                OPENSSL_thread_stop_ex(rk->rk_conf.ssl.lib_ctx);
+#endif
 
         return 0;
 
@@ -2088,6 +2477,13 @@ fail:
         RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
 #endif
         rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.lib_ctx) {
+                OPENSSL_thread_stop_ex(rk->rk_conf.ssl.lib_ctx);
+                OSSL_LIB_CTX_free(rk->rk_conf.ssl.lib_ctx);
+                rk->rk_conf.ssl.lib_ctx = NULL;
+        }
+#endif
 
         return -1;
 }
@@ -2292,3 +2688,31 @@ int unittest_ssl(void) {
 
         return fails;
 }
+
+/* OpenSSL owns its socket BIO and installs WANT_READ/WANT_WRITE interests in
+ * its I/O methods. It has no separate ciphertext flushing service. */
+static rd_bool_t rd_kafka_openssl_pending(rd_kafka_transport_t *t) {
+        return SSL_pending(t->rktrans_tls) > 0;
+}
+static int rd_kafka_openssl_interests(rd_kafka_transport_t *t) {
+        return 0;
+}
+static int rd_kafka_openssl_serve(rd_kafka_transport_t *t, int events,
+                                 char *errstr, size_t errstr_size) {
+        return 0;
+}
+static void rd_kafka_openssl_thread_term(void) {
+        /* Modern OpenSSL performs thread cleanup itself. */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
+#elif OPENSSL_VERSION_NUMBER >= 0x10000000L
+        ERR_remove_thread_state(NULL);
+#endif
+}
+const rd_kafka_tls_ops_t rd_kafka_openssl_ops = {
+    "openssl", rd_kafka_ssl_init, rd_kafka_ssl_term,
+    rd_kafka_ssl_ctx_init, rd_kafka_ssl_ctx_term,
+    rd_kafka_transport_ssl_close, rd_kafka_transport_ssl_connect,
+    rd_kafka_transport_ssl_handshake, rd_kafka_transport_ssl_send,
+    rd_kafka_transport_ssl_recv, rd_kafka_openssl_pending,
+    rd_kafka_openssl_interests, rd_kafka_openssl_serve, NULL,
+    rd_kafka_openssl_thread_term};

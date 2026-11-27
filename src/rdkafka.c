@@ -1127,6 +1127,8 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_broker_state_change_lock);
 
         mtx_destroy(&rk->rk_suppress.sparse_connect_lock);
+        RD_MAP_DESTROY(&rk->rk_reconnect_states.map);
+        mtx_destroy(&rk->rk_reconnect_states.lock);
 
         cnd_destroy(&rk->rk_init_cnd);
         mtx_destroy(&rk->rk_init_lock);
@@ -2660,6 +2662,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_atomic32_init(&rk->rk_broker_down_cnt, 0);
         rd_atomic32_init(&rk->rk_rebootstrap_in_progress, 0);
         rd_atomic64_init(&rk->rk_last_all_brokers_down_reported_ts, 0);
+        mtx_init(&rk->rk_reconnect_states.lock, mtx_plain);
+        RD_MAP_INIT(&rk->rk_reconnect_states.map, 8, rd_map_str_cmp,
+                    rd_map_str_hash, rd_free, rd_free);
 
         rk->rk_rep             = rd_kafka_q_new(rk);
         rk->rk_ops             = rd_kafka_q_new(rk);

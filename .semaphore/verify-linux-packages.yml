@@ -38,3 +38,15 @@ blocks:
             - cd packaging/cp
             - REPOSITORY_BASE_URL=${REPOSITORY_BASE_URL:-https://packages.confluent.io/clients}
             - ./verify-packages.sh ${REPOSITORY_BASE_URL} linux/arm64 ${LIBRDKAFKA_VERSION}
+  - name: "Verify Linux packages (s390x)"
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-ubuntu-24-s390x-4
+      jobs:
+        - name: "Verify packages"
+          commands:
+            - cd packaging/cp
+            - REPOSITORY_BASE_URL=${REPOSITORY_BASE_URL:-https://packages.confluent.io/clients}
+            - ./verify-packages.sh ${REPOSITORY_BASE_URL} linux/s390x ${LIBRDKAFKA_VERSION}

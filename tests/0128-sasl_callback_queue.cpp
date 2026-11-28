@@ -187,6 +187,11 @@ static void do_test_share_consumer(bool use_background_queue) {
     batch = NULL;
   }
 
+  /* The callback is served asynchronously: wait for it. */
+  for (int i = 0; i < 100 && rd_atomic32_get(&share_cb_called) == 0; i++) {
+    rd_usleep(100 * 1000, NULL);
+  }
+
   Test::Say(tostr() << "share_cb_called = " << rd_atomic32_get(&share_cb_called)
                     << "\n");
   TEST_ASSERT(rd_atomic32_get(&share_cb_called) > 0,

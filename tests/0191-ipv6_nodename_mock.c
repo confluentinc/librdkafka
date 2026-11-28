@@ -30,6 +30,7 @@
 
 #ifndef _WIN32
 #include <netdb.h>
+#include <netinet/in.h>
 #else
 #define WIN32_MEAN_AND_LEAN
 #include <winsock2.h>

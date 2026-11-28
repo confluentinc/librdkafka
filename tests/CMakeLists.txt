@@ -182,7 +182,15 @@ else()
     list(APPEND sources ../src/tinycthread.c ../src/tinycthread_extra.c)
 endif()
 
+if(NOT CMAKE_CURRENT_BINARY_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    # Tests open ./fixtures, so copy it for out-of-source builds.
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/fixtures
+         DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
 add_executable(test-runner ${sources})
+# Let dlopen()ed plugins resolve test-runner symbols (e.g. test_level).
+set_target_properties(test-runner PROPERTIES ENABLE_EXPORTS ON)
 target_link_libraries(test-runner PUBLIC rdkafka++)
 
 add_test(NAME RdKafkaTestInParallel COMMAND test-runner -p5)

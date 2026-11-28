@@ -44,6 +44,13 @@
 #endif
 #endif
 
+#if defined(__APPLE__)
+#include "TargetConditionals.h"
+#if TARGET_OS_OSX==1
+#define HAS_SYS_RANDOM
+#endif
+#endif
+
 /**
  * Returns a (non-secure) random seed for a pseudo-random number generator.
  */

@@ -27,10 +27,14 @@ First install required Python packages (trivup with friends):
 
     $ python3 -m pip install -U -r requirements.txt
 
+Note that currently trivup requires Python 3.7 or greater. If you receive
+an error like "ModuleNotFoundError: No module named 'importlib.resources'",
+it's probably due to the version of Python that you're using.
+
 Bring up a Kafka cluster (with the specified version) and start an interactive
 shell, when the shell is exited the cluster is brought down and deleted.
 
-    $ python3 -m trivup.clusters.KafkaCluster 2.3.0   # Broker version
+    $ python3 -m trivup.clusters.KafkaCluster --version 3.9.0   # Broker version
     # You can also try adding:
     #   --ssl    To enable SSL listeners
     #   --sasl <mechanism>   To enable SASL authentication

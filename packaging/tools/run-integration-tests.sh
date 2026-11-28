@@ -29,4 +29,5 @@ DESTDIR="$PWD/dest" make install
 (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft \
  --conf '["group.share.min.record.lock.duration.ms=1000"]' \
  --version ${KAFKA_VERSION} \
+ --conf '["group.consumer.min.session.timeout.ms=1", "group.consumer.min.heartbeat.interval.ms=1"]' \
  --cpversion ${CP_VERSION} --cmd 'make quick')

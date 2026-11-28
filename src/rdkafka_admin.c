@@ -484,6 +484,7 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
         rd_kafka_t *rk             = rkb->rkb_rk;
         rd_kafka_enq_once_t *eonce = opaque;
         rd_kafka_op_t *rko;
+        rd_kafka_replyq_t request_replyq;
         char errstr[512];
         rd_kafka_resp_err_t err;
 
@@ -495,10 +496,15 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
 
         rd_kafka_enq_once_add_source(eonce, "coordinator response");
 
+        /* The request callback takes ownership of the replyq it is passed,
+         * also when it fails, while our caller, rd_kafka_coord_req_fsm(),
+         * destroys \p replyq when we fail: pass the request callback
+         * a reference of its own. */
+        rd_kafka_replyq_copy(&request_replyq, &replyq);
         err = rko->rko_u.admin_request.cbs->request(
             rkb, &rko->rko_u.admin_request.args,
-            &rko->rko_u.admin_request.options, errstr, sizeof(errstr), replyq,
-            rd_kafka_admin_handle_response, eonce);
+            &rko->rko_u.admin_request.options, errstr, sizeof(errstr),
+            request_replyq, rd_kafka_admin_handle_response, eonce);
 
         if (err) {
                 rd_kafka_admin_result_fail(
@@ -506,6 +512,9 @@ rd_kafka_admin_coord_request(rd_kafka_broker_t *rkb,
                     rd_kafka_op2str(rko->rko_type), errstr);
                 rd_kafka_admin_common_worker_destroy(rk, rko,
                                                      rd_true /*destroy*/);
+        } else {
+                /* The request has its own reference: release ours. */
+                rd_kafka_replyq_destroy(&replyq);
         }
         return err;
 }
@@ -8210,6 +8219,7 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeConsumerGroupsRequest(
                             rd_kafka_error_string(error));
                 err = rd_kafka_error_code(error);
                 rd_kafka_error_destroy(error);
+                rd_kafka_replyq_destroy(&replyq);
                 return err;
         }
 
@@ -8255,6 +8265,7 @@ rd_kafka_admin_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
                             rd_kafka_error_string(error));
                 err = rd_kafka_error_code(error);
                 rd_kafka_error_destroy(error);
+                rd_kafka_replyq_destroy(&replyq);
                 return err;
         }
 

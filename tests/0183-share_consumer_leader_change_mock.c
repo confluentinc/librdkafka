@@ -235,8 +235,8 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "set leader to broker %d", broker2);
 
+        /* start_request_tracking also clears any accumulated requests. */
         rd_kafka_mock_start_request_tracking(ctx.mcluster);
-        rd_kafka_mock_clear_requests(ctx.mcluster);
 
         /* 5 rounds: acknowledge 2 records, commitSync each time.
          * Each commitSync should get NOT_LEADER_OR_FOLLOWER. */
@@ -416,9 +416,9 @@ static void test_partition_not_leader_or_follower_silent(void) {
                     msgcnt, broker1, phase1_consumed);
 
         /* Start request tracking before the leader change to capture
-         * ShareFetch requests sent after it. */
+         * ShareFetch requests sent after it. start_request_tracking
+         * also clears any accumulated requests. */
         rd_kafka_mock_start_request_tracking(ctx.mcluster);
-        rd_kafka_mock_clear_requests(ctx.mcluster);
 
         /* Move the partition leader to broker2. The consumer's next
          * ShareFetch to broker1 will get NOT_LEADER_OR_FOLLOWER per

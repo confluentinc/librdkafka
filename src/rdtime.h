@@ -27,6 +27,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#include <sanitizer/msan_interface.h>
+#endif
+#endif
+
+
 #ifndef _RDTIME_H_
 #define _RDTIME_H_
 
@@ -252,6 +259,11 @@ static RD_INLINE void rd_timespec_get(struct timespec *tspec) {
  */
 static RD_INLINE void rd_timeout_init_timespec_us(struct timespec *tspec,
                                                   rd_ts_t timeout_us) {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+        __msan_unpoison(tspec, sizeof(*tspec));
+#endif
+#endif
         if (timeout_us == RD_POLL_INFINITE || timeout_us == RD_POLL_NOWAIT) {
                 tspec->tv_sec  = timeout_us;
                 tspec->tv_nsec = 0;
@@ -276,6 +288,11 @@ static RD_INLINE void rd_timeout_init_timespec_us(struct timespec *tspec,
  */
 static RD_INLINE void rd_timeout_init_timespec(struct timespec *tspec,
                                                int timeout_ms) {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+        __msan_unpoison(tspec, sizeof(*tspec));
+#endif
+#endif
         if (timeout_ms == RD_POLL_INFINITE || timeout_ms == RD_POLL_NOWAIT) {
                 tspec->tv_sec  = timeout_ms;
                 tspec->tv_nsec = 0;

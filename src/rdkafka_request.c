@@ -1169,7 +1169,21 @@ void rd_kafka_OffsetForLeaderEpochRequest(
 int rd_kafka_handle_OffsetFetch_err_action(rd_kafka_broker_t *rkb,
                                            rd_kafka_resp_err_t err,
                                            rd_kafka_buf_t *request) {
-        return rd_kafka_err_action(rkb, err, request, RD_KAFKA_ERR_ACTION_END);
+        return rd_kafka_err_action(
+            rkb, err, request,
+
+            /* The coordinator moved or isn't available yet: re-query for
+             * the coordinator and retry the request against it (#5586).
+             * Without the retry a request-level error, returned with an
+             * empty partition list, leaves the queried partitions waiting
+             * for a reply that never comes. */
+            RD_KAFKA_ERR_ACTION_REFRESH | RD_KAFKA_ERR_ACTION_RETRY,
+            RD_KAFKA_RESP_ERR_NOT_COORDINATOR,
+
+            RD_KAFKA_ERR_ACTION_REFRESH | RD_KAFKA_ERR_ACTION_RETRY,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+
+            RD_KAFKA_ERR_ACTION_END);
 }
 
 /**

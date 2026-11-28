@@ -122,19 +122,65 @@ static void rd_kafka_assignment_dump(rd_kafka_t *rk) {
 }
 
 /**
+ * @returns true if \p err is a request-level OffsetFetch error saying the
+ *          group coordinator moved, isn't available yet or is still loading
+ *          the group's offsets.
+ */
+#define RD_KAFKA_ASSIGNMENT_IS_COORD_ERR(err)                                  \
+        ((err) == RD_KAFKA_RESP_ERR_NOT_COORDINATOR ||                         \
+         (err) == RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE ||               \
+         (err) == RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS)
+
+/**
+ * @brief Put the queried partitions back on the pending list, so the
+ *        assignment state machine queries their committed offsets again.
+ *
+ * Call it when the last OffsetFetch request sent failed, wasn't retried and
+ * returned no partitions: they would otherwise stay on .queried, which blocks
+ * every later offset query (#5586).
+ *
+ * @param err is the error the request failed with, logged.
+ */
+static void rd_kafka_assignment_requeue_queried(rd_kafka_t *rk,
+                                                rd_kafka_resp_err_t err) {
+        rd_kafka_topic_partition_t *qpar;
+
+        RD_KAFKA_TPLIST_FOREACH(qpar, rk->rk_consumer.assignment.queried) {
+                rd_kafka_topic_partition_t *ppar =
+                    rd_kafka_topic_partition_list_add_copy(
+                        rk->rk_consumer.assignment.pending, qpar);
+
+                ppar->offset = RD_KAFKA_OFFSET_STORED;
+
+                rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
+                             "Re-queuing %s [%" PRId32
+                             "] for committed-offset query after "
+                             "request-level %s",
+                             qpar->topic, qpar->partition,
+                             rd_kafka_err2name(err));
+        }
+
+        rd_kafka_topic_partition_list_clear(rk->rk_consumer.assignment.queried);
+}
+
+/**
  * @brief Apply the fetched committed offsets to the current assignment's
  *        queried partitions.
  *
  * @param err is the request-level error, if any. The caller is responsible
  *            for raising this error to the application. It is only used here
- *            to avoid taking actions.
+ *            to avoid taking actions, or to query the partitions again after
+ *            a coordinator error.
+ * @param is_last_query is true if the reply is to the last OffsetFetch
+ *            request sent. Else .queried holds a newer request's partitions.
  *
  * Called from the FetchOffsets response handler below.
  */
 static void
 rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                                   rd_kafka_topic_partition_list_t *offsets,
-                                  rd_kafka_resp_err_t err) {
+                                  rd_kafka_resp_err_t err,
+                                  rd_bool_t is_last_query) {
         rd_kafka_topic_partition_t *rktpar;
 
         RD_KAFKA_TPLIST_FOREACH(rktpar, offsets) {
@@ -234,19 +280,41 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                 /* Do nothing for request-level errors (err is set). */
         }
 
+        /* A request-level coordinator error comes with an empty partition
+         * list, so the loop above leaves the queried partitions on .queried,
+         * which blocks every later offset query. The OffsetFetch handler
+         * retries these errors, so this is only reached when it could not
+         * (the assignment changed while the request was in flight).
+         * Put the partitions back on .pending so the assignment state
+         * machine queries them again (#5586), unless they belong to a newer
+         * request. */
+        if (RD_KAFKA_ASSIGNMENT_IS_COORD_ERR(err) && is_last_query)
+                rd_kafka_assignment_requeue_queried(rk, err);
+
         /* In case of stale member epoch we retry to serve the
          * assignment only after a successful ConsumerGroupHeartbeat. */
-        if (offsets->cnt > 0 && err != RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH)
+        if ((offsets->cnt > 0 || RD_KAFKA_ASSIGNMENT_IS_COORD_ERR(err)) &&
+            err != RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH)
                 rd_kafka_assignment_serve(rk);
 }
 
 
 
 /**
+ * @brief An OffsetFetch request sent by the assignment code, the opaque of
+ *        rd_kafka_assignment_handle_OffsetFetch().
+ */
+typedef struct rd_kafka_assignment_OffsetFetch_s {
+        /** Assignment version when the request was sent. */
+        int64_t version;
+        /** Request id, see rd_kafka_assignment_t.last_query_id. */
+        int64_t query_id;
+} rd_kafka_assignment_OffsetFetch_t;
+
+/**
  * @brief Reply handler for OffsetFetch queries from the assignment code.
  *
- * @param opaque Is a malloced int64_t* containing the assignment version at the
- *               time of the request.
+ * @param opaque Is a malloced rd_kafka_assignment_OffsetFetch_t*.
  *
  * @locality rdkafka main thread
  */
@@ -257,15 +325,19 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                                                    rd_kafka_buf_t *request,
                                                    void *opaque) {
         rd_kafka_topic_partition_list_t *offsets = NULL;
-        int64_t *req_assignment_version          = (int64_t *)opaque;
+        rd_kafka_assignment_OffsetFetch_t *req   = opaque;
         /* Only allow retries if there's been no change to the assignment,
          * otherwise rely on assignment state machine to retry. */
         rd_bool_t allow_retry =
-            *req_assignment_version == rk->rk_consumer.assignment.version;
+            req->version == rk->rk_consumer.assignment.version;
+        /* If a newer request was sent, this request's partitions were
+         * removed from .queried, which now holds the newer request's. */
+        rd_bool_t is_last_query =
+            req->query_id == rk->rk_consumer.assignment.last_query_id;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* Termination, quick cleanup. */
-                rd_free(req_assignment_version);
+                rd_free(req);
                 return;
         }
 
@@ -278,14 +350,40 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                 return; /* retrying */
         }
 
-        rd_free(req_assignment_version);
+        rd_free(req);
 
         /* offsets may be NULL for certain errors, such
          * as ERR__TRANSPORT. */
-        if (!offsets && !allow_retry) {
+        if (!offsets) {
                 rd_dassert(err);
                 if (!err)
                         err = RD_KAFKA_RESP_ERR__NO_OFFSET;
+
+                /* The request got no reply and wasn't retried: a transport
+                 * error or a timeout, typically after the assignment changed
+                 * while it was in flight, or a retry built for a previous
+                 * coordinator with an API version the current one doesn't
+                 * support (a request built for a coordinator without any
+                 * supported version has version -1). Query the partitions
+                 * again instead of leaving them on .queried, which blocks
+                 * every later offset query (#5586): the new request uses the
+                 * current coordinator's version. */
+                if ((rd_kafka_handle_OffsetFetch_err_action(rkb, err, request) &
+                     RD_KAFKA_ERR_ACTION_RETRY) ||
+                    (err == RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE && request &&
+                     request->rkbuf_reqhdr.ApiVersion != -1)) {
+                        rd_kafka_dbg(rk, CGRP, "OFFSET",
+                                     "Offset fetch failed with %s: %s",
+                                     rd_kafka_err2name(err),
+                                     is_last_query
+                                         ? "will query committed offsets again"
+                                         : "superseded by a newer query");
+                        if (is_last_query) {
+                                rd_kafka_assignment_requeue_queried(rk, err);
+                                rd_kafka_assignment_serve(rk);
+                        }
+                        return;
+                }
 
                 rd_kafka_dbg(rk, CGRP, "OFFSET", "Offset fetch error: %s",
                              rd_kafka_err2str(err));
@@ -313,6 +411,20 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                         rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                             rk->rk_cgrp, "OffsetFetch error: Unknown member");
                         break;
+                case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
+                case RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE:
+                case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
+                        /* Transient: don't raise it to the application,
+                         * apply_offsets() below queries the partitions
+                         * again, unless a newer request superseded this
+                         * one. */
+                        rd_kafka_dbg(rk, CGRP, "OFFSET",
+                                     "Offset fetch failed with %s: %s",
+                                     rd_kafka_err2name(err),
+                                     is_last_query
+                                         ? "will query committed offsets again"
+                                         : "superseded by a newer query");
+                        break;
                 default:
                         rd_kafka_dbg(
                             rk, CGRP, "OFFSET",
@@ -329,7 +441,7 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
         }
 
         /* Apply the fetched offsets to the assignment */
-        rd_kafka_assignment_apply_offsets(rk, offsets, err);
+        rd_kafka_assignment_apply_offsets(rk, offsets, err, is_last_query);
 
         rd_kafka_topic_partition_list_destroy(offsets);
 }
@@ -685,8 +797,10 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
 
 
         if (partitions_to_query->cnt > 0) {
-                int64_t *req_assignment_version = rd_malloc(sizeof(int64_t));
-                *req_assignment_version = rk->rk_consumer.assignment.version;
+                rd_kafka_assignment_OffsetFetch_t *req =
+                    rd_malloc(sizeof(*req));
+                req->version  = rk->rk_consumer.assignment.version;
+                req->query_id = ++rk->rk_consumer.assignment.last_query_id;
 
                 rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
                              "Fetching committed offsets for "
@@ -702,7 +816,7 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                     RD_KAFKA_REPLYQ(rk->rk_ops, 0),
                     rd_kafka_assignment_handle_OffsetFetch,
                     /* Must be freed by handler */
-                    (void *)req_assignment_version);
+                    (void *)req);
         }
 
         if (coord)

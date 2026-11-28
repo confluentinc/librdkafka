@@ -441,6 +441,9 @@ extern int unittest_assignment(void);
 #if WITH_SSL
 extern int unittest_ssl(void);
 #endif
+#if WITH_ZLIB
+extern int unittest_gz(void);
+#endif
 
 int rd_unittest(void) {
         int fails = 0;
@@ -457,6 +460,9 @@ int rd_unittest(void) {
             {"msg", unittest_msg},
             {"murmurhash", unittest_murmur2},
             {"fnv1a", unittest_fnv1a},
+#if WITH_ZLIB
+            {"gzip", unittest_gz},
+#endif
             {"mock", unittest_mock_cluster},
 #if WITH_HDRHISTOGRAM
             {"rdhdrhistogram", unittest_rdhdrhistogram},

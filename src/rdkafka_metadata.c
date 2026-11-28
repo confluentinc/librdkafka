@@ -1742,6 +1742,15 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                     rkcg->rkcg_subscription, &topics,
                     rd_false /*no wildcards*/);
 
+        /* If this consumer is the group leader, also include topics
+         * subscribed by other group members so that the leader can
+         * detect partition count changes and trigger a rejoin.
+         * See github issue #4533. */
+        if (rkcg->rkcg_group_leader.group_topics)
+                rd_kafka_topic_partition_list_get_topic_names(
+                    rkcg->rkcg_group_leader.group_topics, &topics,
+                    rd_false /*no wildcards*/);
+
         if (rd_list_cnt(&topics) == 0)
                 err = RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
         else

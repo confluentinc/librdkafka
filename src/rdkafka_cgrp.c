@@ -432,6 +432,9 @@ void rd_kafka_cgrp_set_join_state(rd_kafka_cgrp_t *rkcg, int join_state) {
 void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.members);
+        rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_group_leader.group_topics);
+        rd_kafka_assert(rkcg->rkcg_rk,
+                        !rkcg->rkcg_group_leader.group_subscribed_topics);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription_topics);
         rd_kafka_assert(rkcg->rkcg_rk, !rkcg->rkcg_subscription_regex);
         rd_kafka_cgrp_set_member_id(rkcg, NULL);
@@ -2459,6 +2462,32 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 rkcg->rkcg_group_leader.members    = members;
                 rkcg->rkcg_group_leader.member_cnt = sub_cnt;
 
+                /* Build a list of topics subscribed by other group
+                 * members but not by the leader.  The leader will
+                 * monitor metadata for these topics so it can detect
+                 * partition-count changes and trigger a rejoin. */
+                {
+                        char *topic_name;
+                        int ti;
+
+                        RD_LIST_FOREACH(topic_name, &topics, ti) {
+                                if (rkcg->rkcg_subscription &&
+                                    rd_kafka_topic_partition_list_find(
+                                        rkcg->rkcg_subscription, topic_name,
+                                        RD_KAFKA_PARTITION_UA))
+                                        continue;
+                                if (!rkcg->rkcg_group_leader.group_topics)
+                                        rkcg->rkcg_group_leader.group_topics =
+                                            rd_kafka_topic_partition_list_new(
+                                                rd_list_cnt(&topics));
+                                rd_kafka_topic_partition_list_add(
+                                    rkcg->rkcg_group_leader.group_topics,
+                                    topic_name, RD_KAFKA_PARTITION_UA);
+                        }
+                        rkcg->rkcg_group_leader.group_subscribed_topics =
+                            NULL;
+                }
+
                 rd_kafka_cgrp_set_join_state(
                     rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_METADATA);
 
@@ -2492,6 +2521,14 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                 rd_list_destroy(&topics);
 
         } else {
+                /* We are a follower: clean up any stale group leader
+                 * state from a previous round where we were leader.
+                 * Without this, group_topics and group_subscribed_topics
+                 * would persist and cause unnecessary metadata requests
+                 * and potentially spurious rejoins. */
+                rd_kafka_cgrp_group_leader_reset(
+                    rkcg, "JoinGroup response: not leader");
+
                 rd_kafka_cgrp_set_join_state(
                     rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_SYNC);
 
@@ -2622,6 +2659,12 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
         rd_kafka_metadata_cache_hint_rktparlist(rkcg->rkcg_rk,
                                                 rkcg->rkcg_subscription, NULL);
 
+        /* Also hint group-wide topics if we are the leader. */
+        if (rkcg->rkcg_group_leader.group_topics)
+                rd_kafka_metadata_cache_hint_rktparlist(
+                    rkcg->rkcg_rk,
+                    rkcg->rkcg_group_leader.group_topics, NULL);
+
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION) {
                 /* For wildcard subscriptions make sure the
                  * cached full metadata isn't too old. */
@@ -2650,6 +2693,12 @@ static int rd_kafka_cgrp_metadata_refresh(rd_kafka_cgrp_t *rkcg,
 
                 rd_kafka_topic_partition_list_get_topic_names(
                     rkcg->rkcg_subscription, &topics, 0 /*no regexps*/);
+
+                /* Include group-wide topics if we are the leader. */
+                if (rkcg->rkcg_group_leader.group_topics)
+                        rd_kafka_topic_partition_list_get_topic_names(
+                            rkcg->rkcg_group_leader.group_topics, &topics,
+                            0 /*no regexps*/);
 
                 rd_kafka_rdlock(rk);
                 r = rd_kafka_metadata_cache_topics_count_exists(rk, &topics,
@@ -5518,6 +5567,18 @@ static void rd_kafka_cgrp_group_leader_reset(rd_kafka_cgrp_t *rkcg,
                 rd_free(rkcg->rkcg_group_leader.members);
                 rkcg->rkcg_group_leader.members = NULL;
         }
+
+        if (rkcg->rkcg_group_leader.group_topics) {
+                rd_kafka_topic_partition_list_destroy(
+                    rkcg->rkcg_group_leader.group_topics);
+                rkcg->rkcg_group_leader.group_topics = NULL;
+        }
+
+        if (rkcg->rkcg_group_leader.group_subscribed_topics) {
+                rd_list_destroy(
+                    rkcg->rkcg_group_leader.group_subscribed_topics);
+                rkcg->rkcg_group_leader.group_subscribed_topics = NULL;
+        }
 }
 
 
@@ -7723,6 +7784,66 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
          * Update effective list of topics (takes ownership of \c tinfos)
          */
         changed = rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos);
+
+        /* If we are the group leader, also check topics that other
+         * members subscribe to (but we don't).  A partition-count
+         * change on those topics requires a rejoin so the leader can
+         * recompute the assignment for the whole group.
+         * See github issue #4533. */
+        if (!changed && rkcg->rkcg_group_leader.group_topics &&
+            rkcg->rkcg_group_leader.group_topics->cnt > 0) {
+                rd_list_t *group_tinfos;
+                rd_kafka_topic_partition_list_t *group_errored;
+
+                group_errored = rd_kafka_topic_partition_list_new(0);
+                group_tinfos  = rd_list_new(
+                    rkcg->rkcg_group_leader.group_topics->cnt,
+                    rd_kafka_topic_info_destroy_free);
+
+                rd_kafka_metadata_topic_filter(
+                    rkcg->rkcg_rk, group_tinfos,
+                    rkcg->rkcg_group_leader.group_topics, group_errored);
+
+                rd_kafka_topic_partition_list_destroy(group_errored);
+
+                /* Sort for comparison */
+                rd_list_sort(group_tinfos, rd_kafka_topic_info_cmp);
+
+                if (!rkcg->rkcg_group_leader.group_subscribed_topics) {
+                        /* First check after becoming leader: store the
+                         * baseline without triggering a rejoin.  The
+                         * assignment was just computed from this same
+                         * metadata. */
+                        rd_kafka_dbg(
+                            rkcg->rkcg_rk, CGRP | RD_KAFKA_DBG_METADATA,
+                            "GRPLEADER",
+                            "Group \"%.*s\": "
+                            "initialized group-wide subscribed topics "
+                            "baseline (%d topic(s))",
+                            RD_KAFKAP_STR_PR(rkcg->rkcg_group_id),
+                            rd_list_cnt(group_tinfos));
+                        rkcg->rkcg_group_leader.group_subscribed_topics =
+                            group_tinfos;
+                } else if (rd_list_cmp(
+                               rkcg->rkcg_group_leader
+                                   .group_subscribed_topics,
+                               group_tinfos, rd_kafka_topic_info_cmp)) {
+                        /* Group-wide topic metadata changed */
+                        rd_kafka_dbg(
+                            rkcg->rkcg_rk, CGRP | RD_KAFKA_DBG_METADATA,
+                            "GRPLEADER",
+                            "Group \"%.*s\": "
+                            "group-wide subscription metadata changed",
+                            RD_KAFKAP_STR_PR(rkcg->rkcg_group_id));
+                        rd_list_destroy(
+                            rkcg->rkcg_group_leader.group_subscribed_topics);
+                        rkcg->rkcg_group_leader.group_subscribed_topics =
+                            group_tinfos;
+                        changed = rd_true;
+                } else {
+                        rd_list_destroy(group_tinfos);
+                }
+        }
 
         if (!do_join ||
             (!changed &&

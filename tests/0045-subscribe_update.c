@@ -1008,3 +1008,178 @@ int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
 
         return 0;
 }
+
+
+/**
+ * @brief Verify that partition count changes for topics subscribed by
+ *        non-leader consumers in a non-uniform subscription group are
+ *        detected by the leader and result in a correct reassignment.
+ *
+ * This is the scenario reported in github issue #4533:
+ *  - Consumer A (leader) subscribes to topicA.
+ *  - Consumer B subscribes to topicB.
+ *  - New partitions are added to topicB.
+ *  - The leader should detect the metadata change and trigger a rejoin
+ *    so that consumer B gets the new partitions.
+ *
+ * Uses the mock cluster to avoid requiring a real broker.
+ */
+static void
+do_test_nonuniform_subscription_partition_change_mock(
+    const char *assignment_strategy) {
+        const char *topicA = "topicA";
+        const char *topicB = "topicB";
+        rd_kafka_t *c1, *c2;
+        rd_kafka_conf_t *conf1, *conf2;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *asg;
+        int attempt;
+
+        SUB_TEST("%s", assignment_strategy);
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+
+        TEST_SAY("Creating topics %s (1 partition) and %s (1 partition)\n",
+                 topicA, topicB);
+        TEST_CALL_ERR__(
+            rd_kafka_mock_topic_create(mcluster, topicA, 1, 1));
+        TEST_CALL_ERR__(
+            rd_kafka_mock_topic_create(mcluster, topicB, 1, 1));
+
+        test_conf_init(&conf1, NULL, 60 * 2);
+        test_conf_set(conf1, "bootstrap.servers", bootstraps);
+        test_conf_set(conf1, "partition.assignment.strategy",
+                      assignment_strategy);
+        /* Speed up metadata refresh to detect partition changes quickly. */
+        test_conf_set(conf1, "topic.metadata.refresh.interval.ms", "2000");
+
+        conf2 = rd_kafka_conf_dup(conf1);
+
+        /* Use group.instance.id to make c1 the deterministic leader
+         * (alphabetically first instance id). */
+        test_conf_set(conf1, "client.id", "c1-leader");
+        test_conf_set(conf1, "group.instance.id", "a-leader");
+
+        test_conf_set(conf2, "client.id", "c2-follower");
+        test_conf_set(conf2, "group.instance.id", "b-follower");
+
+        c1 = test_create_consumer("mygroup", test_rebalance_cb, conf1, NULL);
+        c2 = test_create_consumer("mygroup", test_rebalance_cb, conf2, NULL);
+
+        /* c1 subscribes to topicA, c2 subscribes to topicB. */
+        test_consumer_subscribe(c1, topicA);
+        test_consumer_subscribe(c2, topicB);
+
+        /* Wait for both to get a stable assignment. */
+        TEST_SAY("Waiting for initial stable assignment\n");
+        test_consumer_wait_assignment(c1, rd_true);
+        test_consumer_wait_assignment(c2, rd_true);
+
+        rd_kafka_assignment(c1, &asg);
+        TEST_SAY("c1 initial assignment: %d partition(s)\n", asg->cnt);
+        TEST_ASSERT(asg->cnt == 1, "Expected c1 to have 1 partition, got %d",
+                    asg->cnt);
+        TEST_ASSERT(
+            rd_kafka_topic_partition_list_find(asg, topicA, 0) != NULL,
+            "Expected c1 to be assigned %s [0]", topicA);
+        rd_kafka_topic_partition_list_destroy(asg);
+
+        rd_kafka_assignment(c2, &asg);
+        TEST_SAY("c2 initial assignment: %d partition(s)\n", asg->cnt);
+        TEST_ASSERT(asg->cnt == 1, "Expected c2 to have 1 partition, got %d",
+                    asg->cnt);
+        TEST_ASSERT(
+            rd_kafka_topic_partition_list_find(asg, topicB, 0) != NULL,
+            "Expected c2 to be assigned %s [0]", topicB);
+        rd_kafka_topic_partition_list_destroy(asg);
+
+        /* Now increase topicB from 1 to 3 partitions by deleting and
+         * recreating it (mock cluster has no alter-partitions API). */
+        TEST_SAY("Increasing %s partition count from 1 to 3\n", topicB);
+        TEST_CALL_ERR__(rd_kafka_mock_topic_delete(mcluster, topicB));
+        TEST_CALL_ERR__(
+            rd_kafka_mock_topic_create(mcluster, topicB, 3, 1));
+
+        /* Poll both consumers until c2 gets an assignment of 3 partitions
+         * AND c1 has its assignment of 1 partition.
+         * The leader (c1) should detect the metadata change for topicB and
+         * trigger a rejoin.  With the EAGER protocol, both consumers lose
+         * their assignments during the rebalance, so we need to wait
+         * until both have stabilised. */
+        TEST_SAY("Waiting for c2 to be assigned 3 partitions of %s "
+                 "and c1 to have 1 partition of %s\n",
+                 topicB, topicA);
+        for (attempt = 0; attempt < 120; attempt++) {
+                rd_kafka_topic_partition_list_t *asg1, *asg2;
+                rd_bool_t c1_ok, c2_ok;
+
+                test_consumer_poll_once(c1, NULL, 500);
+                test_consumer_poll_once(c2, NULL, 500);
+
+                rd_kafka_assignment(c1, &asg1);
+                rd_kafka_assignment(c2, &asg2);
+                c1_ok = (asg1->cnt == 1);
+                c2_ok = (asg2->cnt == 3);
+                rd_kafka_topic_partition_list_destroy(asg1);
+                rd_kafka_topic_partition_list_destroy(asg2);
+
+                if (c1_ok && c2_ok)
+                        break;
+        }
+
+        /* Verify final assignments. */
+        rd_kafka_assignment(c2, &asg);
+        TEST_SAY("c2 final assignment: %d partition(s)\n", asg->cnt);
+        TEST_ASSERT(asg->cnt == 3,
+                    "Expected c2 to have 3 partitions of %s after "
+                    "partition count change, got %d",
+                    topicB, asg->cnt);
+        TEST_ASSERT(
+            rd_kafka_topic_partition_list_find(asg, topicB, 0) != NULL,
+            "Expected c2 to be assigned %s [0]", topicB);
+        TEST_ASSERT(
+            rd_kafka_topic_partition_list_find(asg, topicB, 1) != NULL,
+            "Expected c2 to be assigned %s [1]", topicB);
+        TEST_ASSERT(
+            rd_kafka_topic_partition_list_find(asg, topicB, 2) != NULL,
+            "Expected c2 to be assigned %s [2]", topicB);
+        rd_kafka_topic_partition_list_destroy(asg);
+
+        /* c1 should still have topicA [0]. */
+        rd_kafka_assignment(c1, &asg);
+        TEST_SAY("c1 final assignment: %d partition(s)\n", asg->cnt);
+        TEST_ASSERT(asg->cnt == 1,
+                    "Expected c1 to still have 1 partition, got %d", asg->cnt);
+        TEST_ASSERT(
+            rd_kafka_topic_partition_list_find(asg, topicA, 0) != NULL,
+            "Expected c1 to still be assigned %s [0]", topicA);
+        rd_kafka_topic_partition_list_destroy(asg);
+
+        test_consumer_close(c1);
+        test_consumer_close(c2);
+        rd_kafka_destroy(c1);
+        rd_kafka_destroy(c2);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+int main_0045_subscribe_nonuniform_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP(
+                    "Non-uniform subscription test is only meaningful "
+                    "with the classic consumer group protocol\n");
+                return 0;
+        }
+
+        do_test_nonuniform_subscription_partition_change_mock("range");
+        do_test_nonuniform_subscription_partition_change_mock("roundrobin");
+        do_test_nonuniform_subscription_partition_change_mock(
+            "cooperative-sticky");
+
+        return 0;
+}

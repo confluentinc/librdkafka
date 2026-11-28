@@ -7433,8 +7433,14 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
         rd_kafka_resp_err_t err;
         const int silent_op = rko->rko_type == RD_KAFKA_OP_RECV_BUF;
         if (unlikely(rd_atomic32_get(&rkcg->rkcg_terminated) == rd_true)) {
+                /* rkcg_ops is forwarded to rk_ops, so ops enqueued just
+                 * before the cgrp terminated are served after it.
+                 * Fail them the same way the disabled rkcg_ops queue fails
+                 * ops enqueued after termination: a caller waiting for the
+                 * reply, e.g. in rd_kafka_op_req(), would otherwise block
+                 * forever. Ops without a reply queue are destroyed. */
                 if (rko)
-                        rd_kafka_op_destroy(rko);
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 

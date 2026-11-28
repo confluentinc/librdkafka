@@ -1,5 +1,10 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Enhancements
+
+* Avoid two allocations when a consumer message header block is the
+  single zero byte that encodes no headers (@mbkroese).
+
 ## Fixes
 
 ### General fixes

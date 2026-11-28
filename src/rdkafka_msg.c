@@ -1466,10 +1466,18 @@ static rd_kafka_resp_err_t rd_kafka_msg_headers_parse(rd_kafka_msg_t *rkm) {
         rd_kafka_resp_err_t err     = RD_KAFKA_RESP_ERR__BAD_MSG;
         int i;
         rd_kafka_headers_t *hdrs = NULL;
+        const rd_kafkap_bytes_t *binhdrs;
 
         rd_dassert(!rkm->rkm_headers);
 
-        if (RD_KAFKAP_BYTES_LEN(&rkm->rkm_u.consumer.binhdrs) == 0)
+        binhdrs = &rkm->rkm_u.consumer.binhdrs;
+
+        /* A header count of zero is the byte 0x00. Parsing it
+         * allocates a shadow buffer and a segment slab, then frees
+         * both, and returns the same NOENT as a missing block. */
+        if (RD_KAFKAP_BYTES_LEN(binhdrs) == 0 ||
+            (RD_KAFKAP_BYTES_LEN(binhdrs) == 1 &&
+             *(const unsigned char *)binhdrs->data == 0))
                 return RD_KAFKA_RESP_ERR__NOENT;
 
         rkbuf = rd_kafka_buf_new_shadow(
